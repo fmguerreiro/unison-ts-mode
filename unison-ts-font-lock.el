@@ -1,4 +1,4 @@
-;;; font-lock.el --- Description -*- lexical-binding: t; -*-
+;;; unison-ts-font-lock.el --- Description -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2023 Filipe Guerreiro
 ;;
@@ -19,8 +19,8 @@
 ;;
 ;;; Code:
 
-(defvar font-lock)
-(setq font-lock
+(defvar unison-ts-font-lock)
+(setq unison-ts-font-lock
       (let* (
              ;; Regex for identifiers
 
@@ -85,5 +85,5 @@
           (,x-type-regexp . (1 font-lock-type-face))
           (,x-esc-regexp . font-lock-negation-char-face))))
 
-(provide 'font-lock)
-;;; font-lock.el ends here
+(provide 'unison-ts-font-lock)
+;;; unison-ts-font-lock.el ends here

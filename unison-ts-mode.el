@@ -17,13 +17,13 @@
 ;;
 ;;  A tree-sitter-based major mode for Unison.
 ;;
-;;  Based on the work from https://github.com/dariooddenino/unison-ts-mode-emacs.
+;;  Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
 ;;
 ;;; Code:
 
-(require 'font-lock)
-(require 'syntax-table)
-(require 'ts-setup)
+(require 'unison-ts-font-lock)
+(require 'unison-ts-syntax-table)
+(require 'unison-ts-setup)
 
 (defun unison-ts-mode-add-fold ()
   "Add a fold above the current line."
@@ -64,29 +64,30 @@
     km)
   "Keymap for `unison-ts-mode'.")
 
-(defun unisonlang-font-lock-extend-region ()
-  "Extend the search region to include an entire block of text."
-  ;; Avoid compiler warnings about these global variables from font-lock.el.
-  ;; See the documentation for variable `font-lock-extend-region-functions'.
-  (eval-when-compile (defvar font-lock-beg) (defvar font-lock-end))
-  (save-excursion
-    (goto-char font-lock-beg)
-    (let ((found (or (re-search-backward "\n\n" nil t) (point-min))))
-      (goto-char font-lock-end)
-      (when (re-search-forward "\n\n" nil t)
-        (beginning-of-line)
-        (setq font-lock-end (point)))
-      (setq font-lock-beg found))))
+;; (defun unisonlang-font-lock-extend-region ()
+;;   "Extend the search region to include an entire block of text."
+;;   ;; Avoid compiler warnings about these global variables from font-lock.el.
+;;   ;; See the documentation for variable `font-lock-extend-region-functions'.
+;;   (eval-when-compile (defvar font-lock-beg) (defvar font-lock-end))
+;;   (save-excursion
+;;     (goto-char font-lock-beg)
+;;     (let ((found (or (re-search-backward "\n\n" nil t) (point-min))))
+;;       (goto-char font-lock-end)
+;;       (when (re-search-forward "\n\n" nil t)
+;;         (beginning-of-line)
+;;         (setq font-lock-end (point)))
+;;       (setq font-lock-beg found))))
 
 ;;;###autoload
 (define-derived-mode unison-ts-mode prog-mode "unison-ts-mode"
-  "Major mode for editing Unison"
+  "Major mode for editing Unison."
 
-  :syntax-table syntax-table
+  :syntax-table unison-ts-syntax-table
 
+  (setq-local font-lock-defaults nil)
   (when (treesit-ready-p 'unison)
     (treesit-parser-create 'unison)
-    (ts-setup))
+    (unison-ts-setup))
 
   ;; we're using tree-sitter for syntax highlighting
   ;; TODO: comment this out
@@ -98,20 +99,28 @@
   ;; (setq-local comment-start "--  ")
   ;; (setq-local comment-end ""))
 
+  ;; definition, type, assignment, builtin, constant, keyword,
+  ;; string-interpolation, comment, doc, string, operator, property,
+  ;; preprocessor, escape-sequence, key (in key-value pairs)
   (setq-local treesit-font-lock-feature-list
               '((comment)
-                (identifier)
+                (doc)
+                (string)
+                (constant)
+                (keyword)
+                (variable)
                 (declaration)
-                (delimiter))))
+                (type))))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.u\\'" . unison-ts-mode))
 
-(provide 'unison-ts-mode)
-;;; unison-ts-mode.el ends here
 
 (after! tree-sitter
   (pushnew! tree-sitter-major-mode-language-alist
             '(unison-ts-mode . unison)))
 
 (add-to-list 'tree-sitter-major-mode-language-alist '(unison-ts-mode . unison))
+
+(provide 'unison-ts-mode)
+;;; unison-ts-mode.el ends here

@@ -1,4 +1,4 @@
-;;; syntax-table.el --- Description -*- lexical-binding: t; -*-
+;;; unison-ts-syntax-table.el --- Description -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2023 Filipe Guerreiro
 ;;
@@ -19,7 +19,7 @@
 ;;
 ;;; Code:
 
-(defconst syntax-table
+(defconst unison-ts-syntax-table
   (let ((table (make-syntax-table)))
     ;; -- Are comments
     (modify-syntax-entry ?- ". 12" table)
@@ -31,6 +31,6 @@
     (modify-syntax-entry ?\] ". 4" table)
     table))
 
-(provide 'syntax-table)
+(provide 'unison-ts-syntax-table)
 
-;;; syntax-table.el ends here
+;;; unison-ts-syntax-table.el ends here

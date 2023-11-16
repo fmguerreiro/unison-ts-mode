@@ -1,4 +1,4 @@
-# Unison Mode for Emacs using Tree Sitter
+# Unison Tree-sitter mode for Emacs
 
 This project aims to provide a major mode for the Unison programming language in Emacs, leveraging the power of Tree Sitter to provide syntax highlighting, code folding, indentation and other advanced editor features.
 
