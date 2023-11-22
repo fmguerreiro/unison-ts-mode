@@ -20,62 +20,7 @@
 ;;; Code:
 
 (require 'treesit)
-
-;; possible faces
-;; @ref: https://www.gnu.org/software/emacs/manual/html_node/ccmode/Faces.html
-(defvar unison-ts-setup-font-lock-rules
-  '(:feature comment
-    :override t
-    :language unison
-    ((comment) @font-lock-comment-face)
-
-    :feature doc
-    :language unison
-    ((doc_block) @font-lock-doc-face)
-
-    :feature string
-    :language unison
-    ([(literal_char) (literal_text)] @font-lock-string-face)
-
-    :feature constant
-    :language unison
-    ([(nat) (int) (float) (literal_boolean) (literal_byte)
-      (literal_list) ;; TODO: maybe not!, it might overlap with other things
-      (hash_qualifier)]
-     @font-lock-constant-face)
-
-    :feature variable
-    :language unison
-    ((wordy_id) @font-lock-variable-name-face)
-
-    :feature declaration
-    :override t
-    :language unison
-    ([(ability_declaration (wordy_id) @font-lock-function-name-face)
-      (term_definition (wordy_id) @font-lock-function-name-face)
-      (type_signature (wordy_id) @font-lock-function-name-face)
-      (term_definition :anchor (wordy_id) @font-lock-function-name-face)])
-
-    :feature type
-    :language unison
-    ([(type_name) @font-lock-type-face
-      (path) @font-lock-type-face
-      (namespace) @font-lock-type-face
-      (term_type (wordy_id)) @font-lock-type-face
-      ;; constructors
-      (ability :anchor (wordy_id) @font-lock-type-face)
-      (effect :anchor (wordy_id) @font-lock-type-face)])
-
-    ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
-    :feature keyword
-    :language unison
-    ([(use) (structural_kw) (cases)
-      (ability) (unique) (where) (operator)
-      (type_kw) (kw_if) (kw_then) (kw_else)
-      (tuple_or_parenthesized) ;; TODO: maybe not!, it might overlap with other things
-      (kw_equals) (type_signature_colon) (arrow_symbol)
-      (do) (delayed) (bang) (or) (and) (pipe)
-      (forall) (handle) (alias) (let) (match) (with) (kw_typelink) (kw_termlink)] @font-lock-keyword-face)))
+(require 'unison-ts-font-lock)
 
 (defun unison-ts-setup ()
   "Setup treesit for unison-ts-mode."
@@ -84,9 +29,9 @@
   ;; This handles font locking -- more on that below.
   (setq-local treesit-font-lock-settings
               (apply #'treesit-font-lock-rules
-                     unison-ts-setup-font-lock-rules))
+                     unison-ts-font-lock))
 
-  (setq-local treesit-font-lock-level 5)
+  (setq-local treesit-font-lock-level 3)
 
   ;; This handles indentation -- again, more on that below.
   ;; (setq-local treesit-simple-indent-rules unison-ts-indent-rules)

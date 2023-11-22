@@ -21,7 +21,6 @@
 ;;
 ;;; Code:
 
-(require 'unison-ts-font-lock)
 (require 'unison-ts-syntax-table)
 (require 'unison-ts-setup)
 
@@ -89,32 +88,18 @@
     (treesit-parser-create 'unison)
     (unison-ts-setup))
 
-  ;; we're using tree-sitter for syntax highlighting
-  ;; TODO: comment this out
-  ;; (setq font-lock-defaults '(font-lock))
-  (setq font-lock-multiline t)
-  ;; (add-hook 'font-lock-extend-region-functions #'unisonlang-font-lock-extend-region)
-  (font-lock-ensure)
-
-  ;; (setq-local comment-start "--  ")
-  ;; (setq-local comment-end ""))
-
   ;; definition, type, assignment, builtin, constant, keyword,
   ;; string-interpolation, comment, doc, string, operator, property,
   ;; preprocessor, escape-sequence, key (in key-value pairs)
   (setq-local treesit-font-lock-feature-list
-              '((comment)
-                (doc)
-                (string)
-                (constant)
-                (keyword)
-                (variable)
-                (declaration)
-                (type))))
+              '((comment doc declaration preprocessor)
+                (constant keyword string type variable function-call)
+                (bracket operator delimiter)))
+  (setq font-lock-multiline t)
+  (font-lock-ensure))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.u\\'" . unison-ts-mode))
-
 
 (after! tree-sitter
   (pushnew! tree-sitter-major-mode-language-alist

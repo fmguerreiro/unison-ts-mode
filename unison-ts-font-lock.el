@@ -20,70 +20,80 @@
 ;;; Code:
 
 (defvar unison-ts-font-lock)
+
+;; possible faces
+;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Faces-for-Font-Lock.html
 (setq unison-ts-font-lock
-      (let* (
-             ;; Regex for identifiers
+      '(:feature comment
+        :override t
+        :language unison
+        ((comment) @font-lock-comment-face)
 
-             ;; Type identifier
-             (type-regexp "[A-Z_][A-Za-z_!'0-9]*")
-             ;; A valid identifier
-             ;; TODO include unicode characters
-             (identifier-regexp "[A-Za-z_][A-Za-z_!'0-9]*")
-             ;; namespaced identifier
-             (namespaced-regexp (concat "\\(?:\\.\\|" identifier-regexp "\\)+"))
+        :feature doc
+        :override t
+        :language unison
+        ((doc_block) @font-lock-doc-face)
 
-             ;; Handle the unison fold
-             (x-fold-regexp "---\\(\n\\|.\\)*")
+        ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
+        :feature keyword
+        :language unison
+        ([(use) (ability) (structural) (structural_kw) (cases) (unique) (where) (type_kw) (kw_if) (kw_then) (kw_else) "!" (do) (delayed) (match) (with) (kw_typelink) (kw_termlink) (forall) (handle)] @font-lock-keyword-face)
+        ;; (alias) (let)
 
-             ;; define several categories of keywords
-             ;; symbol keywords
-             (x-symbol-keywords '(":" "->"))
-             ;; standard alphabetical keywords
-             (x-keywords '("if" "then" "else" "forall" "handle" "unique" "where" "use" "and" "or" "true" "false" "type" "ability" "alias" "let" "namespace" "cases" "match" "with"))
+        :feature constant
+        :override t
+        :language unison
+        ([(nat) (int) (float) (literal_boolean) (literal_byte) (hash_qualifier)] @font-lock-constant-face)
 
-             ;; generate regex strings for each keyword category
-             (x-keywords-regexp (regexp-opt x-keywords 'words))
-             (x-symbol-keywords-regexp (regexp-opt x-symbol-keywords 1))
-             ;; (x-single-quote-exc-regexp (regexp-opt x-single-quote-exc 1))
-             (x-keywords-full-regexp (concat x-keywords-regexp "\\|" x-symbol-keywords-regexp))
+        :feature variable
+        :language unison
+        ([((wordy_id) @font-lock-variable-name-face)
+          (type_name (wordy_id) @font-lock-variable-name-face)])
 
-             (x-request-regexp "Request")
+        :feature preprocessor
+        :language unison
+        ((watch_expression) @font-lock-preprocessor-face)
 
-             ;; single quote or exclamation point when it's not part of an identifier
-             (x-single-quote-exc-regexp "\\(\s\\)\\(!\\|'\\)")
+        :feature type
+        :override t
+        :language unison
+        ([((ability) :anchor (wordy_id) @font-lock-type-face)
+          (effect :anchor (wordy_id) @font-lock-type-face)
+          ((path) @font-lock-type-face)
+          ((namespace) @font-lock-type-face)
+          ((type_signature_colon) (wordy_id) @font-lock-type-face)
+          ((wordy_id) @font-lock-type-face (:match "^[A-Z][a-zA-Z_\\d]+" @font-lock-type-face))])
 
-             ;; Signautres
-             (x-sig-regexp (concat "^\s*?\\(" namespaced-regexp "\\).+?[:=]"))
+        :feature declaration
+        :override t
+        :language unison
+        ([((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-name-face :anchor (type_signature_colon))
+          (term_declaration (type_signature :anchor (path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-name-face))
+          (term_declaration (term_definition :anchor (path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-name-face (kw_equals)))])
 
-             ;; Namespaces definition
-             (x-namespace-def-regexp (concat "namespace\s+\\(" namespaced-regexp "\\)\s+where"))
-             ;; Namespaces import
-             (x-namespace-import-regexp (concat "use\s+\\(" namespaced-regexp "\\)"))
+        :feature function-call
+        :override t
+        :language unison
+        ([(function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-call-face :anchor (tuple_or_parenthesized)))
+          (function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-call-face :anchor [(nat) (int) (float) (literal_boolean) (literal_byte) (hash_qualifier) (wordy_id) (literal_list)]))])
 
-             ;; Abilities
-             (x-ability-def-regexp (concat "ability\s\\(" type-regexp "\\)\s.+"))
-             ;;(x-ability-regexp (concat "{\\(?:.*\\|\\(" type-regexp "\\)\\)}"))
-             (x-ability-regexp (concat "[{,].*?\\(" type-regexp "\\)"))
+        :feature bracket
+        :language unison
+        ([(tuple_or_parenthesized) (literal_list) (effect)] @font-lock-bracket-face)
 
-             (x-type-def-regexp (concat "type\s\\(" type-regexp "\\)\s.+"))
-             (x-type-regexp (concat "[^a-z]\\(" type-regexp "\\)"))
+        :feature operator
+        :language unison
+        ([(or) (and) (pipe) (operator) (kw_equals) (type_signature_colon) (arrow_symbol)] @font-lock-operator-face)
 
-             (x-esc-regexp "!"))
+        ;; TODO: '.' as in List.map
+        :feature delimiter
+        :language unison
+        ([","] @font-lock-delimiter-face)
 
-
-        `(
-          (,x-fold-regexp . (0 font-lock-comment-face t))
-          (,x-keywords-full-regexp . font-lock-keyword-face)
-          (,x-single-quote-exc-regexp . (2 font-lock-keyword-face))
-          (,x-request-regexp . font-lock-preprocessor-face)
-          (,x-sig-regexp . (1 font-lock-function-name-face))
-          (,x-namespace-def-regexp . (1 font-lock-constant-face))
-          (,x-namespace-import-regexp . (1 font-lock-constant-face))
-          (,x-ability-def-regexp . (1 font-lock-variable-name-face))
-          (,x-ability-regexp . (1 font-lock-variable-name-face))
-          (,x-type-def-regexp . (1 font-lock-type-face))
-          (,x-type-regexp . (1 font-lock-type-face))
-          (,x-esc-regexp . font-lock-negation-char-face))))
+        :feature string
+        :override t
+        :language unison
+        ([(literal_char) (literal_text)] @font-lock-string-face)))
 
 (provide 'unison-ts-font-lock)
 ;;; unison-ts-font-lock.el ends here
