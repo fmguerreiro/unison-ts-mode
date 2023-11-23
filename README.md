@@ -2,6 +2,12 @@
 
 This project aims to provide a major mode for the Unison programming language in Emacs, leveraging the power of Tree Sitter to provide syntax highlighting, code folding, indentation and other advanced editor features.
 
+### Sample highlighting
+
+<img width="431" alt="スクリーンショット 2023-11-23 15 27 08" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/1ca84b2f-0cda-41d0-9885-6c3758fdd46c">
+
+<img width="470" alt="スクリーンショット 2023-11-23 14 25 26" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/ee2a6bfd-eafc-4e7f-9ee8-c29797f3876b">
+
 ## Installation
 
 1. Clone or download this project to your local machine.
