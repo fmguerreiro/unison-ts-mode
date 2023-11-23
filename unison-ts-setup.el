@@ -31,6 +31,11 @@
               (apply #'treesit-font-lock-rules
                      unison-ts-font-lock))
 
+  (setq-local font-lock-defaults nil)
+  (setq-local treesit-font-lock-feature-list
+              '((comment doc declaration preprocessor error)
+                (constant keyword string type variable function-call)
+                (bracket operator delimiter)))
   (setq-local treesit-font-lock-level 3)
 
   ;; This handles indentation -- again, more on that below.
