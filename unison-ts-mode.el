@@ -92,7 +92,7 @@
   ;; string-interpolation, comment, doc, string, operator, property,
   ;; preprocessor, escape-sequence, key (in key-value pairs)
   (setq-local treesit-font-lock-feature-list
-              '((comment doc declaration preprocessor)
+              '((comment doc declaration preprocessor error)
                 (constant keyword string type variable function-call)
                 (bracket operator delimiter)))
   (setq font-lock-multiline t)

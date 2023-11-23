@@ -23,8 +23,15 @@
 
 ;; possible faces
 ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Faces-for-Font-Lock.html
+;; syntax
+;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Pattern-Matching.html
 (setq unison-ts-font-lock
-      '(:feature comment
+      '(:feature error
+        :override t
+        :language unison
+        ((ERROR) @font-lock-warning-face)
+
+        :feature comment
         :override t
         :language unison
         ((comment) @font-lock-comment-face)
@@ -48,6 +55,8 @@
         :feature variable
         :language unison
         ([((wordy_id) @font-lock-variable-name-face)
+          ((path) :? @font-lock-type-face (wordy_id) @font-lock-variable-name-face)
+          ((type_argument) @font-lock-variable-name-face)
           (type_name (wordy_id) @font-lock-variable-name-face)])
 
         :feature preprocessor
@@ -74,8 +83,8 @@
         :feature function-call
         :override t
         :language unison
-        ([(function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-call-face :anchor (tuple_or_parenthesized)))
-          (function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-call-face :anchor [(nat) (int) (float) (literal_boolean) (literal_byte) (hash_qualifier) (wordy_id) (literal_list)]))])
+        ([(function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-variable-name-face :anchor (operator)))
+          (function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-call-face))])
 
         :feature bracket
         :language unison
@@ -87,6 +96,7 @@
 
         ;; TODO: '.' as in List.map
         :feature delimiter
+        :override t
         :language unison
         ([","] @font-lock-delimiter-face)
 
