@@ -21,10 +21,11 @@
 
 (require 'treesit)
 (require 'unison-ts-font-lock)
+(require 'unison-ts-indent-rules)
 
 (defun unison-ts-setup ()
   "Setup treesit for unison-ts-mode."
-  (interactive)
+  (interactive) ;; TODO: remove
 
   ;; This handles font locking -- more on that below.
   (setq-local treesit-font-lock-settings
@@ -38,12 +39,9 @@
                 (bracket operator delimiter)))
   (setq-local treesit-font-lock-level 3)
 
-  ;; This handles indentation -- again, more on that below.
-  ;; (setq-local treesit-simple-indent-rules unison-ts-indent-rules)
+  ;; TODO: remove
+  (setq-local treesit--indent-verbose t)
 
-  ;; ... everything else we talk about go here also ...
-
-  ;; End with this
   (treesit-major-mode-setup))
 
 (provide 'unison-ts-setup)
