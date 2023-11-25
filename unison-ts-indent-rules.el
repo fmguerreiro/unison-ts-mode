@@ -24,20 +24,22 @@
 (defconst unison-ts-indent-rules--capture-parent-bol-pattern
   (regexp-opt '("term_definition" "type_declaration" "nested" "pattern"
                 "tuple_or_parenthesized" "tuple_pattern" "function_application"
-                ;; FIXME: "exp_if", there's a problem with the grammar, which should give
-                ;; (exp_if (kw_if (...) (kw_then (...) (kw_else (...))))), but gives
-                ;; (exp_if (kw_if ... kw_then ... kw_else ...))
-                "constructor")))
+                "exp_if" "constructor")))
+
+(defconst unison-ts-indent-rules--capture-node-eol-pattern
+  (regexp-opt '("kw_then" "kw_else")))
+
 ;; docs:
 ;; jump-to-definition -> treesit-simple-indent-presets
 ;; jump-to-definition -> treesit-simple-indent-rules
 
-(setq-default tab-width 2)
-
+;; (setq-default tab-width 8) ;; TODO: revert to 2
+(setq tab-width 8)
 ;; where, let, do, of, use, cases, nested, else ?
 (defvar unison-ts-indent-rules)
 (setq unison-ts-indent-rules
       `((unison
+         ((node-is ,unison-ts-indent-rules--capture-node-eol-pattern) parent 0)
          ((parent-is ,unison-ts-indent-rules--capture-parent-bol-pattern) parent-bol ,tab-width)
          ((parent-is "ERROR") prev-line ,tab-width)
          (no-node parent 0))))

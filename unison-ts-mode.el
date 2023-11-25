@@ -38,9 +38,9 @@
 (add-to-list 'auto-mode-alist '("\\.u\\'" . unison-ts-mode))
 (add-to-list 'auto-mode-alist '("\\.unison\\'" . unison-ts-mode))
 
-;; TODO: remove?
+;; TODO: remove
 ;; for tree-sitter-debug-mode
-(add-to-list 'tree-sitter-major-mode-language-alist '(unison-ts-mode . unison))
+;; (add-to-list 'tree-sitter-major-mode-language-alist '(unison-ts-mode . unison))
 
 (provide 'unison-ts-mode)
 ;;; unison-ts-mode.el ends here

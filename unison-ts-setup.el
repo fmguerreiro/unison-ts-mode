@@ -40,7 +40,8 @@
   (setq-local treesit-font-lock-level 3)
 
   ;; TODO: remove
-  (setq-local treesit--indent-verbose t)
+  ;; (setq-local treesit--indent-verbose t)
+  (setq-local treesit-simple-indent-rules unison-ts-indent-rules)
 
   (treesit-major-mode-setup))
 
