@@ -2,8 +2,6 @@
 
 This project aims to provide a major mode for the Unison programming language in Emacs, leveraging the power of Tree Sitter to provide syntax highlighting, code folding, indentation and other advanced editor features.
 
-Depends on the work of [kylegoetz's tree-sitter unison grammar implementation](https://github.com/kylegoetz/tree-sitter-unison), so ensure that is installed (instructions below as well).
-
 ### Sample highlighting
 
 <img width="431" alt="スクリーンショット 2023-11-23 15 27 08" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/1ca84b2f-0cda-41d0-9885-6c3758fdd46c">
@@ -12,29 +10,66 @@ Depends on the work of [kylegoetz's tree-sitter unison grammar implementation](h
 
 ## Installation
 
-1. Clone or download this project to your local machine.
+1. Add `unison-ts-mode` to your config files:
 
-2. Ensure that you have Tree Sitter installed. You can find installation instructions [here](https://emacs-tree-sitter.github.io/).
+- Option 1: Using quelpa
 
-3. Add the project directory to your Emacs load-path.
+``` elisp
+(quelpa '(unison-ts-mode :repo "fmguerreiro/unison-ts-mode" :fetcher github))
+```
 
-    ```elisp
-    (add-to-list 'load-path "/path/to/unison-ts-mode")
-    ```
+- Option 2: Using Doom (in packages.el)
 
-4. Require the `unison-ts-mode` package in your Emacs init file.
+``` elisp
+(package! unison-ts-mode :recipe (:host github :repo "fmguerreiro/unison-ts-mode" :branch "main"))
+```
 
-    ```elisp
-    (require 'unison-ts-mode)
-    ```
+- Option 3: Using straight
 
-5. Associate the `.u` file extension with the Unison mode.
+``` elisp
+(straight-use-package
+ '(unison-ts-mode :type git :host github :repo "fmguerreiro/unison-ts-mode"))
+```
 
-    ```elisp
-    (add-to-list 'auto-mode-alist '("\\.u\\'" . unison-ts-mode))
-    ```
+- Option 4: Add the project to your Emacs load-path
 
-6. Restart Emacs or evaluate the added code to load the Unison mode.
+``` sh
+git clone https://github.com/fmguerreiro/unison-ts-mode
+```
+
+``` elisp
+(add-to-list 'load-path "/path/to/unison-ts-mode")
+```
+
+2. Ensure you have tree-sitter installed. You can find installation instructions [here](https://www.masteringemacs.org/article/how-to-get-started-tree-sitter).
+
+3. Upon loading a .u file, Emacs will complain about not finding the grammar. 
+We're gonna install [kylegoetz's grammar](https://github.com/kylegoetz/tree-sitter-unison) here. As of the time of writing, it does not work through `M-x treesit-install-language-grammar`, so we're gonna build it manually.
+
+``` sh
+git clone https://github.com/kylegoetz/tree-sitter-unison.git
+cd tree-sitter-unison
+npm install; npm run start
+
+# figure out what kind of extension we need
+if [ "$(uname)" = "Darwin" ]; then soext="dylib"; elif uname | grep -q "MINGW" > /dev/null; then soext="dll"; else soext="so"; fi
+
+cd src
+cc -fPIC -c -I. parser.c
+cc -fPIC -c -I. scanner.c
+cc -fPIC -shared *.o -o "unison.${soext}"
+```
+
+Now that the binary is built, we can just move it over to where the tree-sitter implementation is looking for them.
+In my case, I am using [tree-sitter-langs](https://github.com/emacs-tree-sitter/tree-sitter-langs) package and [Doom](https://github.com/doomemacs/doomemacs), so I can move the binary over with:
+
+``` sh
+cp "unison.${soext}" ~/doom-emacs/.local/straight/build-30.0.50/tree-sitter-langs/bin
+```
+
+Your case might be different depending on your particular Emacs configuration.
+
+NOTE: If you get an error about incompatible ABI versions, open up the `package.json` file and change the "start" script from `"start": "tree-sitter generate,` to `"start": "tree-sitter generate --abi=13",` and redo the build/copy steps.
 
 ## Usage
 
@@ -42,16 +77,7 @@ Once the Unison mode is installed, it will automatically activate whenever you o
 
 The Unison mode provides the following features:
 - Syntax highlighting for Unison code.
-- Code folding to hide or reveal blocks of code.
-- Navigation through code using Tree Sitter's syntax tree.
 - Indentation and automatic formatting.
-
-In addition to the default keybindings provided by Emacs, the Unison mode includes the following keybindings:
-
-- `C-c C-r` (`unison-reload`) - Reload the syntax tree for the current buffer.
-- `C-c C-f` (`unison-fold-toggle`) - Toggle code folding for the current code block.
-
-Refer to the Unison mode documentation for more information on available commands, keybindings, and customization options.
 
 ## Contributing
 
@@ -60,3 +86,7 @@ Contributions to this project are welcome. Please follow the standard GitHub wor
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
+## Contributors
+
+This mode depends on the work of [@kylegoetz](https://github.com/kylegoetz/tree-sitter-unison).
