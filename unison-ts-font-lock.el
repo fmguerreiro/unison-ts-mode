@@ -44,7 +44,7 @@
         ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
         :feature keyword
         :language unison
-        ([(use) (ability) (structural) (structural_kw) (cases) (unique) (where) (type_kw) (kw_if) (kw_then) (kw_else) "!" (do) (delayed) (match) (with) (kw_typelink) (kw_termlink) (forall) (handle)] @font-lock-keyword-face)
+        ([(use) (ability) (structural) (structural_kw) (cases) (unique) (where) (type_kw) (kw_if) (kw_then) (kw_else) "!" (do) (delayed) (match) (with) (kw_typelink) (kw_termlink) (kw_forall) (handle)] @font-lock-keyword-face)
         ;; (alias) (let)
 
         :feature constant
