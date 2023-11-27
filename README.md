@@ -10,35 +10,13 @@ This project aims to provide a major mode for the Unison programming language in
 
 ## Installation
 
-1. Add `unison-ts-mode` to your config files:
+1. Add `unison-ts-mode` using your preferred method.
 
-- Option 1: Using quelpa
-
-``` elisp
-(quelpa '(unison-ts-mode :repo "fmguerreiro/unison-ts-mode" :fetcher github))
-```
-
-- Option 2: Using Doom (in packages.el)
-
-``` elisp
-(package! unison-ts-mode :recipe (:host github :repo "fmguerreiro/unison-ts-mode" :branch "main"))
-```
-
-- Option 3: Using straight
+- Example using straight
 
 ``` elisp
 (straight-use-package
  '(unison-ts-mode :type git :host github :repo "fmguerreiro/unison-ts-mode" :files ("*.el")))
-```
-
-- Option 4: Add the project to your Emacs load-path
-
-``` sh
-git clone https://github.com/fmguerreiro/unison-ts-mode
-```
-
-``` elisp
-(add-to-list 'load-path "/path/to/unison-ts-mode")
 ```
 
 2. Ensure you have tree-sitter installed. You can find installation instructions [here](https://www.masteringemacs.org/article/how-to-get-started-tree-sitter).
@@ -53,7 +31,7 @@ As of the time of writing, it does not work through `M-x treesit-install-languag
 (setq treesit-language-source-alist '((unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz" "build/include-parser-in-src-control")))
 ```
 
-<!--- This is a clone of the original project, since it doesn't include parser.c in src control, which is expected by the treesit-install-language-grammar command. This may be fixed in a future version of the grammar implementation. --->
+(This is a clone of the original project, since it doesn't include parser.c in src control, which is expected by the treesit-install-language-grammar command. This may be fixed in a future version.)
 
 Then run `M-x treesit-install-language-grammar` and choose `unison`.
 
