@@ -50,7 +50,7 @@
         :feature constant
         :override t
         :language unison
-        ([(nat) (int) (float) (literal_boolean) (literal_byte) (hash_qualifier)] @font-lock-constant-face)
+        ([(nat) (int) (float) (literal_boolean) (literal_byte) (literal_hex) (hash_qualifier)] @font-lock-constant-face)
 
         :feature variable
         :language unison
