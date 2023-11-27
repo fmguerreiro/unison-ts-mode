@@ -19,12 +19,10 @@
 ;;
 ;;; Code:
 
-
-
 (defconst unison-ts-indent-rules--capture-parent-bol-pattern
   (regexp-opt '("term_definition" "type_declaration" "nested" "pattern"
-                "tuple_or_parenthesized" "tuple_pattern" "function_application"
-                "exp_if" "constructor")))
+                "tuple_or_parenthesized" "literal_list" "tuple_pattern" "function_application"
+                "exp_if" "constructor" "delay_block")))
 
 (defconst unison-ts-indent-rules--capture-node-eol-pattern
   (regexp-opt '("kw_then" "kw_else")))
@@ -33,8 +31,7 @@
 ;; jump-to-definition -> treesit-simple-indent-presets
 ;; jump-to-definition -> treesit-simple-indent-rules
 
-;; (setq-default tab-width 8) ;; TODO: revert to 2
-(setq tab-width 8)
+(setq-default tab-width 2)
 ;; where, let, do, of, use, cases, nested, else ?
 (defvar unison-ts-indent-rules)
 (setq unison-ts-indent-rules
