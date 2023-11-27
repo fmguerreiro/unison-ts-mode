@@ -23,9 +23,8 @@ This project aims to provide a major mode for the Unison programming language in
 
 3. Upon loading a .u file, Emacs will complain about not finding the grammar. 
 We're gonna install [kylegoetz's grammar](https://github.com/kylegoetz/tree-sitter-unison) here. 
-As of the time of writing, it does not work through `M-x treesit-install-language-grammar` by default, so we there are two options.
 
-- Evaluate:
+- Option 1, through `M-x treesit-install-language-grammar`:
 
 ``` elisp
 (setq treesit-language-source-alist '((unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz" "build/include-parser-in-src-control")))
@@ -35,7 +34,8 @@ As of the time of writing, it does not work through `M-x treesit-install-languag
 
 Then run `M-x treesit-install-language-grammar` and choose `unison`.
 
-- Or, build it manually:
+- Option 2, build it manually:
+
 ``` sh
 git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
