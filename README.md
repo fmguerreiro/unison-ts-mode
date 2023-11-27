@@ -28,7 +28,7 @@ This project aims to provide a major mode for the Unison programming language in
 
 ``` elisp
 (straight-use-package
- '(unison-ts-mode :type git :host github :repo "fmguerreiro/unison-ts-mode"))
+ '(unison-ts-mode :type git :host github :repo "fmguerreiro/unison-ts-mode" :files ("*.el")))
 ```
 
 - Option 4: Add the project to your Emacs load-path
@@ -44,8 +44,20 @@ git clone https://github.com/fmguerreiro/unison-ts-mode
 2. Ensure you have tree-sitter installed. You can find installation instructions [here](https://www.masteringemacs.org/article/how-to-get-started-tree-sitter).
 
 3. Upon loading a .u file, Emacs will complain about not finding the grammar. 
-We're gonna install [kylegoetz's grammar](https://github.com/kylegoetz/tree-sitter-unison) here. As of the time of writing, it does not work through `M-x treesit-install-language-grammar`, so we're gonna build it manually.
+We're gonna install [kylegoetz's grammar](https://github.com/kylegoetz/tree-sitter-unison) here. 
+As of the time of writing, it does not work through `M-x treesit-install-language-grammar` by default, so we there are two options.
 
+- Evaluate:
+
+``` elisp
+(setq treesit-language-source-alist '((unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz" "build/include-parser-in-src-control")))
+```
+
+<!--- This is a clone of the original project, since it doesn't include parser.c in src control, which is expected by the treesit-install-language-grammar command. This may be fixed in a future version of the grammar implementation. --->
+
+Then run `M-x treesit-install-language-grammar` and choose `unison`.
+
+- Or, build it manually:
 ``` sh
 git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
