@@ -26,11 +26,11 @@ We're gonna install [kylegoetz's grammar](https://github.com/kylegoetz/tree-sitt
 
 - Option 1, through `M-x treesit-install-language-grammar`:
 
+First eval (or temporarily add to your config) the following expression:
+
 ``` elisp
 (setq treesit-language-source-alist '((unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz" "build/include-parser-in-src-control")))
 ```
-
-(This is a clone of the original project, since it doesn't include parser.c in src control, which is expected by the treesit-install-language-grammar command. This may be fixed in a future version.)
 
 Then run `M-x treesit-install-language-grammar` and choose `unison`.
 
