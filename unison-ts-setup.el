@@ -25,18 +25,20 @@
 
 (defun unison-ts-setup ()
   "Setup treesit for unison-ts-mode."
+  ;; (interactive) ;; TODO: remove
 
-  ;; This handles font locking -- more on that below.
   (setq-local treesit-font-lock-settings
               (apply #'treesit-font-lock-rules
                      unison-ts-font-lock))
 
   (setq-local font-lock-defaults nil)
   (setq-local treesit-font-lock-feature-list
-              '((comment doc declaration preprocessor error)
-                (constant keyword string type variable function-call)
+              ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Levels-of-Font-Lock.html
+              '((comment doc string declaration preprocessor error)
+                (keyword type constant)
+                (function-call variable)
                 (bracket operator delimiter)))
-  (setq-local treesit-font-lock-level 3)
+  (setq-local treesit-font-lock-level 4)
 
   ;; TODO: remove: (setq-local treesit--indent-verbose t)
   (setq-local treesit-simple-indent-rules unison-ts-indent-rules)

@@ -19,6 +19,26 @@
 ;;
 ;;; Code:
 
+(require 'treesit)
+
+(declare-function treesit-query-compile "treesit.c")
+(declare-function treesit-query-validate "treesit.c")
+
+;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
+(defvar unison-ts-font-lock--keywords
+  '("use" "!" "structural" "unique" "if" "then" "else"
+    (ability) (namespace) (cases) (where) (do) (handle)
+    (kw_let) (match) (with) (kw_typelink) (kw_termlink)
+    (kw_forall) (type_kw)))
+
+(defvar unison-ts-font-lock--constants
+  '((nat) (int) (float) (literal_boolean) (literal_byte)
+    (literal_hex) (hash_qualifier)))
+
+(defvar unison-ts-font-lock-operators
+  '((or) (and) (pipe) (operator) (kw_equals)
+    (type_signature_colon) (arrow_symbol)))
+
 (defvar unison-ts-font-lock)
 
 ;; possible faces
@@ -26,7 +46,7 @@
 ;; syntax
 ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Pattern-Matching.html
 (setq unison-ts-font-lock
-      '(:feature error
+      `(:feature error
         :override t
         :language unison
         ((ERROR) @font-lock-warning-face)
@@ -41,22 +61,27 @@
         :language unison
         ((doc_block) @font-lock-doc-face)
 
-        ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
+        :feature declaration
+        :override t
+        :language unison
+        ([(constructor :anchor (wordy_id) @font-lock-function-name-face)
+          (term_definition :anchor (wordy_id) @font-lock-function-name-face)
+          (type_signature (wordy_id) @font-lock-function-name-face)])
+
         :feature keyword
         :language unison
-        ([(use) (ability) (structural) (structural_kw) (cases) (unique) (where) (type_kw) (kw_if) (kw_then) (kw_else) "!" (do) (delayed) (match) (with) (kw_typelink) (kw_termlink) (kw_forall) (handle)] @font-lock-keyword-face)
-        ;; (alias) (let)
+        ([,@unison-ts-font-lock--keywords] @font-lock-keyword-face)
 
         :feature constant
         :override t
         :language unison
-        ([(nat) (int) (float) (literal_boolean) (literal_byte) (literal_hex) (hash_qualifier)] @font-lock-constant-face)
+        ([,@unison-ts-font-lock--constants] @font-lock-constant-face)
 
         :feature variable
         :language unison
-        ([((wordy_id) @font-lock-variable-name-face)
-          ((path) :? @font-lock-type-face (wordy_id) @font-lock-variable-name-face)
-          ((type_argument) @font-lock-variable-name-face)
+        ([((path) @font-lock-type-face :*)
+          ((wordy_id) @font-lock-variable-use-face)
+          ((type_argument) @font-lock-variable-use-face)
           (type_name (wordy_id) @font-lock-variable-name-face)])
 
         :feature preprocessor
@@ -66,25 +91,16 @@
         :feature type
         :override t
         :language unison
-        ([((ability) :anchor (wordy_id) @font-lock-type-face)
-          (effect :anchor (wordy_id) @font-lock-type-face)
-          ((path) @font-lock-type-face)
-          ((namespace) @font-lock-type-face)
-          ((type_signature_colon) (wordy_id) @font-lock-type-face)
+        ([((namespace) @font-lock-type-face)
           ((wordy_id) @font-lock-type-face (:match "^[A-Z][a-zA-Z_\\d]+" @font-lock-type-face))])
-
-        :feature declaration
-        :override t
-        :language unison
-        ([((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-name-face :anchor (type_signature_colon))
-          (term_declaration (type_signature :anchor (path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-name-face))
-          (term_declaration (term_definition :anchor (path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-name-face (kw_equals)))])
 
         :feature function-call
         :override t
         :language unison
-        ([(function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-variable-name-face :anchor (operator)))
-          (function_application :anchor ((path) :? @font-lock-type-face :anchor (wordy_id) @font-lock-function-call-face))])
+        ([;; TODO arguments should be highlighted as variables
+          ;; (function_application (wordy_id) @font-lock-variable-use-face :anchor (operator))
+          ;; function name should be highlighted as a function
+          (function_application :anchor (wordy_id) @font-lock-function-call-face)])
 
         :feature bracket
         :language unison
@@ -92,9 +108,8 @@
 
         :feature operator
         :language unison
-        ([(or) (and) (pipe) (operator) (kw_equals) (type_signature_colon) (arrow_symbol)] @font-lock-operator-face)
+        ([,@unison-ts-font-lock-operators] @font-lock-operator-face)
 
-        ;; TODO: '.' as in List.map
         :feature delimiter
         :override t
         :language unison
