@@ -65,7 +65,10 @@
         :override t
         :language unison
         ([(constructor :anchor (wordy_id) @font-lock-function-name-face)
-          (term_definition :anchor (wordy_id) @font-lock-function-name-face)
+          ;; declarations with no args are highlighted as variable declarations
+          (term_definition :anchor (path) :? (wordy_id) @font-lock-variable-name-face :anchor (kw_equals))
+          ;; by default, declarations are highlighted as function declarations
+          (term_definition :anchor (path) :? (wordy_id) @font-lock-function-name-face)
           (type_signature (wordy_id) @font-lock-function-name-face)])
 
         :feature keyword
@@ -97,10 +100,11 @@
         :feature function-call
         :override t
         :language unison
-        ([;; TODO arguments should be highlighted as variables
-          ;; (function_application (wordy_id) @font-lock-variable-use-face :anchor (operator))
+        ([;; TODO arguments should be highlighted as variables as much as possible, but slow down the font-lock too much
+          ;; ((wordy_id) @font-lock-variable-use-face :anchor (operator))
+          ;; ((operator) :anchor (wordy_id) @font-lock-variable-use-face)
           ;; function name should be highlighted as a function
-          (function_application :anchor (wordy_id) @font-lock-function-call-face)])
+          (function_application :anchor (path) :? (wordy_id) @font-lock-function-call-face)])
 
         :feature bracket
         :language unison
