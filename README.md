@@ -79,4 +79,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Contributors
 
-This mode depends on the work of [@kylegoetz](https://github.com/kylegoetz/tree-sitter-unison).
+This mode depends on the Tree Sitter grammar work of [@kylegoetz](https://github.com/kylegoetz/tree-sitter-unison).
