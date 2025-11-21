@@ -33,7 +33,7 @@
 
 (defvar unison-ts-font-lock--constants
   '((nat) (int) (float) (literal_boolean) (literal_byte)
-    (hash_qualifier)))
+    (literal_hex) (hash_qualifier)))
 
 (defvar unison-ts-font-lock-operators
   '((or) (and) (pipe) (operator) (kw_equals)
