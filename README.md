@@ -1,82 +1,110 @@
-# Unison Tree-sitter mode for Emacs
+# unison-ts-mode
 
-This project aims to provide a major mode for the Unison programming language in Emacs, leveraging the power of Tree Sitter to provide syntax highlighting, code folding, indentation and other advanced editor features.
+Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 
-### Sample highlighting
+## Screenshots
 
-<img width="431" alt="スクリーンショット 2023-11-23 15 27 08" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/1ca84b2f-0cda-41d0-9885-6c3758fdd46c">
+<img width="431" alt="Syntax highlighting example 1" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/1ca84b2f-0cda-41d0-9885-6c3758fdd46c">
 
-<img width="470" alt="スクリーンショット 2023-11-23 14 25 26" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/ee2a6bfd-eafc-4e7f-9ee8-c29797f3876b">
+<img width="470" alt="Syntax highlighting example 2" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/ee2a6bfd-eafc-4e7f-9ee8-c29797f3876b">
+
+## Requirements
+
+- Emacs 29+ (with native tree-sitter support)
+- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz)
 
 ## Installation
 
-1. Add `unison-ts-mode` using your preferred method.
+### Grammar
 
-- Example using straight
+```elisp
+(add-to-list 'treesit-language-source-alist
+  '(unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz"
+           "build/include-parser-in-src-control"))
+```
 
-``` elisp
+Then `M-x treesit-install-language-grammar RET unison`.
+
+### Package
+
+**use-package + straight:**
+
+```elisp
+(use-package unison-ts-mode
+  :straight (:host github :repo "fmguerreiro/unison-ts-mode")
+  :mode ("\\.u\\'" "\\.unison\\'"))
+```
+
+**straight.el:**
+
+```elisp
 (straight-use-package
- '(unison-ts-mode :type git :host github :repo "fmguerreiro/unison-ts-mode" :files ("*.el")))
+  '(unison-ts-mode :type git :host github :repo "fmguerreiro/unison-ts-mode"))
 ```
 
-2. Ensure you have tree-sitter installed. You can find installation instructions [here](https://www.masteringemacs.org/article/how-to-get-started-tree-sitter).
+**Doom Emacs:**
 
-3. Upon loading a .u file, Emacs will complain about not finding the grammar. 
-We're gonna install [kylegoetz's grammar](https://github.com/kylegoetz/tree-sitter-unison) here. 
-
-- Option 1, through `M-x treesit-install-language-grammar`:
-
-First eval (or temporarily add to your config) the following expression:
-
-``` elisp
-(setq treesit-language-source-alist '((unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz" "build/include-parser-in-src-control")))
+```elisp
+;; packages.el
+(package! unison-ts-mode :recipe (:host github :repo "fmguerreiro/unison-ts-mode"))
 ```
 
-Then run `M-x treesit-install-language-grammar` and choose `unison`.
+### Manual Grammar Build
 
-- Option 2, build it manually:
+If you prefer to build the grammar manually:
 
-``` sh
-git clone https://github.com/kylegoetz/tree-sitter-unison.git
-cd tree-sitter-unison
-npm install; npm run start
+```sh
+git clone https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz.git
+cd tree-sitter-unison-kylegoetz
 
-# figure out what kind of extension we need
-if [ "$(uname)" = "Darwin" ]; then soext="dylib"; elif uname | grep -q "MINGW" > /dev/null; then soext="dll"; else soext="so"; fi
+# Determine shared library extension
+if [ "$(uname)" = "Darwin" ]; then soext="dylib"
+elif uname | grep -q "MINGW"; then soext="dll"
+else soext="so"; fi
 
 cd src
 cc -fPIC -c -I. parser.c
 cc -fPIC -c -I. scanner.c
-cc -fPIC -shared *.o -o "unison.${soext}"
+cc -fPIC -shared *.o -o "libtree-sitter-unison.${soext}"
+
+# Copy to Emacs tree-sitter directory
+mkdir -p ~/.emacs.d/tree-sitter
+cp "libtree-sitter-unison.${soext}" ~/.emacs.d/tree-sitter/
 ```
 
-Now that the binary is built, we can just move it over to where the tree-sitter implementation is looking for them.
-In my case, I am using [tree-sitter-langs](https://github.com/emacs-tree-sitter/tree-sitter-langs) package and [Doom](https://github.com/doomemacs/doomemacs), so I can move the binary over with:
+## Features
 
-``` sh
-cp "unison.${soext}" ~/doom-emacs/.local/straight/build-30.0.50/tree-sitter-langs/bin
+- Syntax highlighting (4 customizable levels via `treesit-font-lock-level`)
+- Indentation
+- `treesit-explore-mode` support for syntax tree inspection
+
+## Font-lock Levels
+
+Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or set `treesit-font-lock-level`:
+
+1. comment, doc, string, declaration, preprocessor, error
+2. keyword, type, constant
+3. function-call, variable
+4. bracket, operator, delimiter
+
+## Troubleshooting
+
+**ABI version mismatch:** If you encounter ABI compatibility errors, rebuild the grammar with the `--abi=13` flag:
+
+```sh
+tree-sitter generate --abi=13
 ```
 
-Your case might be different depending on your particular Emacs configuration.
-
-NOTE: If you get an error about incompatible ABI versions, open up the `package.json` file and change the "start" script from `"start": "tree-sitter generate,` to `"start": "tree-sitter generate --abi=13",` and redo the build/copy steps.
-
-## Usage
-
-Once the Unison mode is installed, it will automatically activate whenever you open a file with the `.u` extension.
-
-The Unison mode provides the following features:
-- Syntax highlighting for Unison code.
-- Indentation and automatic formatting.
+**Grammar not found:** Ensure the compiled grammar is in a directory listed in `treesit-extra-load-path` or the default `~/.emacs.d/tree-sitter/`.
 
 ## Contributing
 
-Contributions to this project are welcome. Please follow the standard GitHub workflow for submitting pull requests.
+Contributions welcome. Please follow standard GitHub workflow for pull requests.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+MIT License. See [LICENSE](LICENSE) for details.
 
-## Contributors
+## Credits
 
-This mode depends on the Tree Sitter grammar work of [@kylegoetz](https://github.com/kylegoetz/tree-sitter-unison).
+Tree-sitter grammar by [@kylegoetz](https://github.com/kylegoetz/tree-sitter-unison).
