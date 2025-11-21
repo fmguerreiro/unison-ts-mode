@@ -10,6 +10,13 @@
 (require 'ert)
 (require 'treesit)
 
+;; Try common tree-sitter grammar locations
+(dolist (path '("~/.emacs.d/tree-sitter/"
+                "~/doom-emacs/.local/cache/tree-sitter/"
+                "~/.local/share/tree-sitter/"))
+  (when (file-directory-p (expand-file-name path))
+    (add-to-list 'treesit-extra-load-path (expand-file-name path))))
+
 (defvar unison-ts-mode-tests--grammar-available
   (treesit-ready-p 'unison t)
   "Non-nil if the Unison tree-sitter grammar is available.")
@@ -587,13 +594,12 @@
 
 (ert-deftest unison-ts-font-lock/ability-declaration ()
   "Ability declarations should highlight ability keyword."
-  (unison-ts-mode-tests--with-buffer "ability Store v where\n  get : v\n  put : v -> ()"
-    (goto-char (point-min))
-    (should (eq (get-text-property (point) 'face) 'font-lock-keyword-face))))
+  (unison-ts-mode-tests--with-buffer "structural ability Store v where\n  get : v\n  put : v -> ()"
+    (should (eq (unison-ts-mode-tests--face-at-string "ability") 'font-lock-keyword-face))))
 
 (ert-deftest unison-ts-font-lock/ability-declaration-name ()
   "Ability declaration names should be highlighted as types."
-  (unison-ts-mode-tests--with-buffer "ability Store v where\n  get : v"
+  (unison-ts-mode-tests--with-buffer "structural ability Store v where\n  get : v"
     (goto-char (point-min))
     (search-forward "Store")
     (backward-char 1)
@@ -681,7 +687,7 @@
 
 (ert-deftest unison-ts-indent/ability-declaration-ops ()
   "Ability declaration operations should be indented."
-  (unison-ts-mode-tests--with-buffer "ability Store v where\n  get : v\n  put : v -> ()"
+  (unison-ts-mode-tests--with-buffer "structural ability Store v where\n  get : v\n  put : v -> ()"
     (goto-char (point-min))
     (forward-line 1)
     (should (= (current-indentation) 2))))
@@ -720,6 +726,23 @@
   "Mode should activate for .unison files."
   (require 'unison-ts-mode)
   (should (eq (cdr (assoc "\\.unison\\'" auto-mode-alist)) 'unison-ts-mode)))
+
+;;; ADT constructor tests
+
+(ert-deftest unison-ts-font-lock/adt-constructor-after-equals ()
+  "ADT constructors after = should be highlighted as types."
+  (unison-ts-mode-tests--with-buffer "structural type Result a e = Ok a | Err e"
+    (should (eq (unison-ts-mode-tests--face-at-string "Ok") 'font-lock-type-face))))
+
+(ert-deftest unison-ts-font-lock/adt-constructor-after-pipe ()
+  "ADT constructors after | should be highlighted as types."
+  (unison-ts-mode-tests--with-buffer "structural type Result a e = Ok a | Err e"
+    (should (eq (unison-ts-mode-tests--face-at-string "Err") 'font-lock-type-face))))
+
+(ert-deftest unison-ts-font-lock/ability-operation-name ()
+  "Ability operation names should be highlighted as functions."
+  (unison-ts-mode-tests--with-buffer "structural ability State s where\n  get : {State s} s"
+    (should (eq (unison-ts-mode-tests--face-at-string "get") 'font-lock-function-name-face))))
 
 ;;; Documentation tests
 
