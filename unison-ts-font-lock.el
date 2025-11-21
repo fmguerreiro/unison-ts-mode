@@ -27,7 +27,7 @@
 ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
 (defvar unison-ts-font-lock--keywords
   '((use) (structural) (unique) (kw_if) (kw_then) (kw_else)
-    (ability) (namespace) (cases) (where) (do) (handle)
+    (ability) (cases) (where) (do) (handle)
     (kw_let) (match) (with) (kw_typelink) (kw_termlink)
     (kw_forall) (type_kw)))
 
@@ -97,6 +97,12 @@
         :feature preprocessor
         :language unison
         ((watch_expression) @font-lock-preprocessor-face)
+
+        :feature import
+        :override t
+        :language unison
+        ([(use_clause (namespace (regular_identifier) @font-lock-type-face))
+          (use_clause (regular_identifier) @font-lock-type-face)])
 
         :feature type
         :override t

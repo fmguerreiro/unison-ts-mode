@@ -34,7 +34,7 @@
   (setq-local font-lock-defaults nil)
   (setq-local treesit-font-lock-feature-list
               ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Levels-of-Font-Lock.html
-              '((comment doc string declaration preprocessor error)
+              '((comment doc string declaration preprocessor error import)
                 (keyword type constant)
                 (function-call variable)
                 (bracket operator delimiter)))
