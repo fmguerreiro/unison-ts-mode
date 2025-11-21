@@ -721,6 +721,38 @@
   (require 'unison-ts-mode)
   (should (eq (cdr (assoc "\\.unison\\'" auto-mode-alist)) 'unison-ts-mode)))
 
+;;; Documentation tests
+
+(ert-deftest unison-ts-font-lock/doc-block ()
+  "Doc blocks ({{ }}) should be highlighted as doc."
+  (unison-ts-mode-tests--with-buffer "{{ This is documentation }}"
+    (goto-char (point-min))
+    (should (eq (get-text-property (point) 'face) 'font-lock-doc-face))))
+
+(ert-deftest unison-ts-font-lock/doc-block-multiline ()
+  "Multiline doc blocks should be highlighted."
+  (unison-ts-mode-tests--with-buffer "{{ This is\nmultiline\ndocumentation }}"
+    (goto-char (point-min))
+    (should (eq (get-text-property (point) 'face) 'font-lock-doc-face))))
+
+(ert-deftest unison-ts-font-lock/doc-block-with-markdown ()
+  "Doc blocks with **markdown** should be highlighted."
+  (unison-ts-mode-tests--with-buffer "{{ Doc with **bold** text }}"
+    (goto-char (point-min))
+    (should (eq (get-text-property (point) 'face) 'font-lock-doc-face))))
+
+(ert-deftest unison-ts-font-lock/doc-block-term-link ()
+  "Doc blocks with {termName} links should be highlighted."
+  (unison-ts-mode-tests--with-buffer "{{ See {myFunction} for details }}"
+    (goto-char (point-min))
+    (should (eq (get-text-property (point) 'face) 'font-lock-doc-face))))
+
+(ert-deftest unison-ts-font-lock/doc-block-type-link ()
+  "Doc blocks with {type TypeName} links should be highlighted."
+  (unison-ts-mode-tests--with-buffer "{{ Returns a {type Optional} }}"
+    (goto-char (point-min))
+    (should (eq (get-text-property (point) 'face) 'font-lock-doc-face))))
+
 ;;; Literal tests
 
 (ert-deftest unison-ts-font-lock/literal-nat-decimal ()
