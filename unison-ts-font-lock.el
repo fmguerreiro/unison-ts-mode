@@ -33,7 +33,7 @@
 
 (defvar unison-ts-font-lock--constants
   '((nat) (int) (float) (literal_boolean) (literal_byte)
-    (literal_hex) (hash_qualifier)))
+    (hash_qualifier)))
 
 (defvar unison-ts-font-lock-operators
   '((or) (and) (pipe) (operator) (kw_equals)
@@ -70,6 +70,8 @@
           (type_declaration (pipe) :anchor (wordy_id) @font-lock-type-face)
           ;; Ability operation names
           (ability_declaration (constructor name: (wordy_id) @font-lock-function-name-face))
+          ;; Record field names
+          (record_field name: (wordy_id) @font-lock-property-name-face)
           ;; declarations with no args are highlighted as variable declarations
           (term_definition :anchor (path) :? (wordy_id) @font-lock-variable-name-face :anchor (kw_equals))
           ;; by default, declarations are highlighted as function declarations

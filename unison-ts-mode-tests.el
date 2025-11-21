@@ -578,7 +578,7 @@
 
 (ert-deftest unison-ts-font-lock/record-type ()
   "Record types (type R = {field : Type}) should highlight type name."
-  (unison-ts-mode-tests--with-buffer "type Person = { name : Text, age : Nat }"
+  (unison-ts-mode-tests--with-buffer "structural type Person = { name : Text, age : Nat }"
     (goto-char (point-min))
     (search-forward "Person")
     (backward-char 1)
@@ -586,11 +586,19 @@
 
 (ert-deftest unison-ts-font-lock/record-type-field ()
   "Record type fields should have their types highlighted."
-  (unison-ts-mode-tests--with-buffer "type Person = { name : Text }"
+  (unison-ts-mode-tests--with-buffer "structural type Person = { name : Text }"
     (goto-char (point-min))
     (search-forward "Text")
     (backward-char 1)
     (should (eq (get-text-property (point) 'face) 'font-lock-type-face))))
+
+(ert-deftest unison-ts-font-lock/record-field-name ()
+  "Record field names should be highlighted as properties."
+  (unison-ts-mode-tests--with-buffer "structural type Person = { name : Text }"
+    (goto-char (point-min))
+    (search-forward "name")
+    (backward-char 1)
+    (should (eq (get-text-property (point) 'face) 'font-lock-property-name-face))))
 
 (ert-deftest unison-ts-font-lock/ability-declaration ()
   "Ability declarations should highlight ability keyword."
