@@ -73,10 +73,10 @@
           ;; Record field names
           (record_field (field_name) @font-lock-property-name-face)
           ;; declarations with no args are highlighted as variable declarations
-          (term_definition :anchor (path) :? (regular_identifier) @font-lock-variable-name-face :anchor (kw_equals))
+          (term_definition name: (regular_identifier) @font-lock-variable-name-face (kw_equals))
           ;; by default, declarations are highlighted as function declarations
-          (term_definition :anchor (path) :? (regular_identifier) @font-lock-function-name-face)
-          (type_signature (regular_identifier) @font-lock-function-name-face)])
+          (term_definition name: (regular_identifier) @font-lock-function-name-face)
+          (type_signature term_name: (regular_identifier) @font-lock-function-name-face)])
 
         :feature keyword
         :language unison
