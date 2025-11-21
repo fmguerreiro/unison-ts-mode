@@ -102,6 +102,7 @@
         :override t
         :language unison
         ([(use_clause (namespace (regular_identifier) @font-lock-type-face))
+          (use_clause (namespace (path) @font-lock-type-face))
           (use_clause (regular_identifier) @font-lock-type-face)])
 
         :feature type
