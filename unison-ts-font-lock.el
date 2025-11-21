@@ -65,6 +65,11 @@
         :override t
         :language unison
         ([(constructor :anchor (wordy_id) @font-lock-function-name-face)
+          ;; Type constructors in ADT definitions (after = or |)
+          (type_declaration (kw_equals) :anchor (wordy_id) @font-lock-type-face)
+          (type_declaration (pipe) :anchor (wordy_id) @font-lock-type-face)
+          ;; Ability operation names
+          (ability_declaration (constructor name: (wordy_id) @font-lock-function-name-face))
           ;; declarations with no args are highlighted as variable declarations
           (term_definition :anchor (path) :? (wordy_id) @font-lock-variable-name-face :anchor (kw_equals))
           ;; by default, declarations are highlighted as function declarations
