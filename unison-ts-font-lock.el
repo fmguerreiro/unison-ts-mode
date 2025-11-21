@@ -26,7 +26,7 @@
 
 ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
 (defvar unison-ts-font-lock--keywords
-  '("use" "!" "structural" "unique" "if" "then" "else"
+  '((use) (structural) (unique) (kw_if) (kw_then) (kw_else)
     (ability) (namespace) (cases) (where) (do) (handle)
     (kw_let) (match) (with) (kw_typelink) (kw_termlink)
     (kw_forall) (type_kw)))
@@ -64,19 +64,19 @@
         :feature declaration
         :override t
         :language unison
-        ([(constructor :anchor (wordy_id) @font-lock-function-name-face)
+        ([(constructor :anchor (regular_identifier) @font-lock-function-name-face)
           ;; Type constructors in ADT definitions (after = or |)
-          (type_declaration (kw_equals) :anchor (wordy_id) @font-lock-type-face)
-          (type_declaration (pipe) :anchor (wordy_id) @font-lock-type-face)
+          (type_declaration (kw_equals) :anchor (regular_identifier) @font-lock-type-face)
+          (type_declaration (pipe) :anchor (regular_identifier) @font-lock-type-face)
           ;; Ability operation names
-          (ability_declaration (constructor name: (wordy_id) @font-lock-function-name-face))
+          (ability_declaration (constructor name: (regular_identifier) @font-lock-function-name-face))
           ;; Record field names
-          (record_field name: (wordy_id) @font-lock-property-name-face)
+          (record_field (field_name) @font-lock-property-name-face)
           ;; declarations with no args are highlighted as variable declarations
-          (term_definition :anchor (path) :? (wordy_id) @font-lock-variable-name-face :anchor (kw_equals))
+          (term_definition :anchor (path) :? (regular_identifier) @font-lock-variable-name-face :anchor (kw_equals))
           ;; by default, declarations are highlighted as function declarations
-          (term_definition :anchor (path) :? (wordy_id) @font-lock-function-name-face)
-          (type_signature (wordy_id) @font-lock-function-name-face)])
+          (term_definition :anchor (path) :? (regular_identifier) @font-lock-function-name-face)
+          (type_signature (regular_identifier) @font-lock-function-name-face)])
 
         :feature keyword
         :language unison
@@ -90,9 +90,9 @@
         :feature variable
         :language unison
         ([((path) @font-lock-type-face :*)
-          ((wordy_id) @font-lock-variable-use-face)
+          ((regular_identifier) @font-lock-variable-use-face)
           ((type_argument) @font-lock-variable-use-face)
-          (type_name (wordy_id) @font-lock-variable-name-face)])
+          (type_name (regular_identifier) @font-lock-variable-name-face)])
 
         :feature preprocessor
         :language unison
@@ -102,16 +102,14 @@
         :override t
         :language unison
         ([((namespace) @font-lock-type-face)
-          ((wordy_id) @font-lock-type-face (:match "^[A-Z][a-zA-Z_\\d]+" @font-lock-type-face))])
+          ((regular_identifier) @font-lock-type-face (:match "^[A-Z][a-zA-Z_\\d]+" @font-lock-type-face))])
 
-        :feature function-call
-        :override t
-        :language unison
-        ([;; TODO arguments should be highlighted as variables as much as possible, but slow down the font-lock too much
-          ;; ((wordy_id) @font-lock-variable-use-face :anchor (operator))
-          ;; ((operator) :anchor (wordy_id) @font-lock-variable-use-face)
-          ;; function name should be highlighted as a function
-          (function_application :anchor (path) :? (wordy_id) @font-lock-function-call-face)])
+        ;; TODO: function_application node no longer exists in grammar
+        ;; :feature function-call
+        ;; :override t
+        ;; :language unison
+        ;; ([;; function name should be highlighted as a function
+        ;;   (function_application :anchor (path) :? (regular_identifier) @font-lock-function-call-face)])
 
         :feature bracket
         :language unison
