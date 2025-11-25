@@ -26,6 +26,15 @@ To control this behavior, customize `unison-ts-grammar-install`:
 
 You can also install manually with `M-x unison-ts-install-grammar`.
 
+**Advanced: Custom grammar source**
+
+To use a fork or different branch:
+
+```elisp
+(setq unison-ts-grammar-repository "https://github.com/yourname/tree-sitter-unison")
+(setq unison-ts-grammar-revision "your-branch")  ; Optional
+```
+
 ### Package
 
 **use-package + straight:**

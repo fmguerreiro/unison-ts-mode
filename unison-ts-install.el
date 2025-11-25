@@ -15,6 +15,18 @@
                  (const :tag "Never auto-install" nil))
   :group 'unison-ts)
 
+(defcustom unison-ts-grammar-repository "https://github.com/fmguerreiro/tree-sitter-unison"
+  "Repository URL for the Unison tree-sitter grammar."
+  :type 'string
+  :group 'unison-ts)
+
+(defcustom unison-ts-grammar-revision nil
+  "Git revision (branch, tag, or commit) for the grammar.
+If nil, uses the default branch."
+  :type '(choice (const :tag "Default branch" nil)
+                 (string :tag "Branch/tag/commit"))
+  :group 'unison-ts)
+
 (defvar unison-ts--install-prompted nil
   "Whether we've already prompted for installation this session.")
 
@@ -23,7 +35,9 @@
   (interactive)
   (unless (assoc 'unison treesit-language-source-alist)
     (add-to-list 'treesit-language-source-alist
-                 '(unison "https://github.com/fmguerreiro/tree-sitter-unison")))
+                 (if unison-ts-grammar-revision
+                     (list 'unison unison-ts-grammar-repository unison-ts-grammar-revision)
+                   (list 'unison unison-ts-grammar-repository))))
   (condition-case err
       (progn
         (message "Installing Unison grammar...")
