@@ -102,6 +102,8 @@ Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or 
 
 `unison-ts-mode` includes built-in LSP integration for IDE features like autocomplete, go-to-definition, hover documentation, and diagnostics.
 
+![LSP features in action](docs/lsp-demo.png)
+
 ### Prerequisites
 
 - **UCM (Unison Codebase Manager)**: Install from https://www.unison-lang.org/docs/install-instructions/
