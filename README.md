@@ -88,6 +88,7 @@ cp "libtree-sitter-unison.${soext}" ~/.emacs.d/tree-sitter/
 - Indentation
 - `treesit-explore-mode` support for syntax tree inspection
 - LSP integration (eglot and lsp-mode)
+- imenu support for quick navigation
 
 ## Font-lock Levels
 
@@ -97,6 +98,34 @@ Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or 
 2. keyword, type, constant
 3. function-call, variable
 4. bracket, operator, delimiter
+
+## Navigation with imenu
+
+`unison-ts-mode` provides imenu support for quick navigation within Unison files.
+
+### Usage
+
+- **Jump to definition**: `M-x imenu` then select item
+- **Show in speedbar**: `M-x speedbar`
+- **Current function in mode line**: `M-x which-function-mode`
+- **With completion frameworks**:
+  - Helm: `M-x helm-imenu`
+  - Ivy/Counsel: `M-x counsel-imenu`
+  - Consult: `M-x consult-imenu`
+
+### Indexed Items
+
+imenu indexes these Unison constructs:
+- Functions and value definitions
+- Type declarations
+- Ability declarations
+
+### Configuration
+
+```elisp
+;; Enable which-function-mode to show current function in mode line
+(add-hook 'unison-ts-mode-hook 'which-function-mode)
+```
 
 ## LSP Support
 

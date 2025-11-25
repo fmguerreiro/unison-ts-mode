@@ -1215,5 +1215,46 @@
 
 ;;; Mode activation tests
 
+;;; Imenu tests
+
+(ert-deftest unison-ts-mode-imenu/functions-indexed ()
+  "Functions should appear in imenu."
+  (unison-ts-mode-tests--with-buffer "foo x = x + 1\nbar = 42"
+    (when (treesit-ready-p 'unison)
+      (let ((index (funcall imenu-create-index-function)))
+        (should (assoc "Functions" index))
+        (let ((functions (cdr (assoc "Functions" index))))
+          (should (>= (length functions) 2))
+          (should (assoc-string "foo" functions))
+          (should (assoc-string "bar" functions)))))))
+
+(ert-deftest unison-ts-mode-imenu/types-indexed ()
+  "Type declarations should appear in imenu."
+  (unison-ts-mode-tests--with-buffer "type Result a e = Ok a | Err e"
+    (when (treesit-ready-p 'unison)
+      (let ((index (funcall imenu-create-index-function)))
+        (should (assoc "Types" index))
+        (let ((types (cdr (assoc "Types" index))))
+          (should (assoc-string "Result" types)))))))
+
+(ert-deftest unison-ts-mode-imenu/abilities-indexed ()
+  "Ability declarations should appear in imenu."
+  (unison-ts-mode-tests--with-buffer "structural ability Store v where\n  get : v"
+    (when (treesit-ready-p 'unison)
+      (let ((index (funcall imenu-create-index-function)))
+        (should (assoc "Abilities" index))
+        (let ((abilities (cdr (assoc "Abilities" index))))
+          (should (assoc-string "Store" abilities)))))))
+
+(ert-deftest unison-ts-mode-imenu/comprehensive ()
+  "Imenu should index all major constructs."
+  (unison-ts-mode-tests--with-buffer
+      "foo x = x + 1\n\ntype Maybe a = Just a | Nothing\n\nstructural ability IO where\n  getLine : Text"
+    (when (treesit-ready-p 'unison)
+      (let ((index (funcall imenu-create-index-function)))
+        (should (assoc "Functions" index))
+        (should (assoc "Types" index))
+        (should (assoc "Abilities" index))))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

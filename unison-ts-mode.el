@@ -1,29 +1,81 @@
-;;; unison-ts-mode.el --- Description -*- lexical-binding: t; -*-
-;;
-;; Copyright (C) 2023 Filipe Guerreiro
-;;
+;;; unison-ts-mode.el --- Tree-sitter support for Unison -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2023-2024 Filipe Guerreiro
+
 ;; Author: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
 ;; Maintainer: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
 ;; Created: November 11, 2023
-;; Modified: November 11, 2023
-;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
-;; Homepage: https://github.com/fmguerreiro/unison-ts-mode
-;; Package-Requires: ((emacs "25.1"))
-;;
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "29.1"))
+;; Keywords: languages unison tree-sitter
+;; URL: https://github.com/fmguerreiro/unison-ts-mode
+
 ;; This file is not part of GNU Emacs.
-;;
+
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 ;;; Commentary:
+
+;; This package provides tree-sitter powered major mode for the Unison
+;; programming language (https://www.unison-lang.org/).
 ;;
-;;  A tree-sitter-based major mode for Unison.
+;; Features:
+;; - Syntax highlighting with tree-sitter
+;; - Automatic indentation
+;; - imenu support for navigation
+;; - LSP integration (eglot and lsp-mode)
+;; - Auto-install of tree-sitter grammar
 ;;
-;;  Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
+;; Usage:
+;; The mode is automatically activated for .u and .unison files.
+;; For LSP support, install UCM (Unison Codebase Manager) and enable
+;; eglot or lsp-mode.
 ;;
+;; Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
+
 ;;; Code:
 
 (require 'unison-ts-syntax-table)
 (require 'unison-ts-setup)
 (require 'unison-ts-install)
+
+;;; Imenu
+
+(defun unison-ts-mode--defun-name (node)
+  "Return the name of NODE for imenu."
+  (pcase (treesit-node-type node)
+    ("term_declaration"
+     (when-let* ((term-def (treesit-search-subtree node "term_definition" nil nil 1))
+                 (name-node (treesit-node-child term-def 0)))
+       (treesit-node-text name-node t)))
+    ("type_declaration"
+     (when-let* ((type-constructor (treesit-node-child node 1))
+                 (type-name (treesit-node-child type-constructor 0)))
+       (treesit-node-text type-name t)))
+    ("ability_declaration"
+     (when-let* ((ability-name (treesit-search-subtree node "ability_name" nil nil 1))
+                 (name-identifier (treesit-node-child ability-name 0)))
+       (treesit-node-text name-identifier t)))
+    (_ nil)))
+
+(defvar unison-ts-mode-imenu-settings
+  `(("Functions" "\\`term_declaration\\'" nil ,#'unison-ts-mode--defun-name)
+    ("Types" "\\`type_declaration\\'" nil ,#'unison-ts-mode--defun-name)
+    ("Abilities" "\\`ability_declaration\\'" nil ,#'unison-ts-mode--defun-name))
+  "Imenu settings for Unison.
+Each entry is (CATEGORY REGEXP PRED NAME-FN).
+See `treesit-simple-imenu-settings' for details.")
 
 ;;;###autoload
 (define-derived-mode unison-ts-mode prog-mode "Unison"
@@ -34,7 +86,10 @@
   (when (and (unison-ts-ensure-grammar)
              (treesit-ready-p 'unison))
     (treesit-parser-create 'unison)
-    (unison-ts-setup)))
+    (unison-ts-setup)
+
+    (setq-local treesit-simple-imenu-settings unison-ts-mode-imenu-settings)
+    (setq-local imenu-create-index-function #'treesit-simple-imenu)))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.u\\'" . unison-ts-mode))
@@ -72,7 +127,7 @@ Starts UCM in headless mode if not already running."
   (lsp-register-client
    (make-lsp-client
     :new-connection (lsp-tcp-connection
-                     (lambda (port)
+                     (lambda (_port)
                        (let ((lsp-port (or (getenv "UNISON_LSP_PORT") "5757")))
                          ;; Start UCM headless if not already running
                          (unless (ignore-errors
