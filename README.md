@@ -260,7 +260,7 @@ Contributions welcome. Please follow standard GitHub workflow for pull requests.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+GPL-3.0 License. See [LICENSE](LICENSE) for details.
 
 ## Credits
 
