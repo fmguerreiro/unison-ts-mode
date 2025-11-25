@@ -99,6 +99,10 @@ See `treesit-simple-imenu-settings' for details.")
 
 ;;; LSP Integration
 
+;; Optional LSP integration using `with-eval-after-load' to avoid
+;; requiring eglot/lsp-mode as dependencies.  This is the standard
+;; pattern for optional integrations in tree-sitter modes.
+
 (defun unison-ts-mode--eglot-contact (_interactive)
   "Contact function for eglot to connect to UCM LSP server.
 Starts UCM in headless mode if not already running."
