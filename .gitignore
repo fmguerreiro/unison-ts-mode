@@ -1,0 +1,19 @@
+# Compiled Emacs files
+*.elc
+
+# Backup files
+*~
+\#*\#
+.\#*
+
+# Auto-save files
+.#*
+
+# Package build artifacts
+dist/
+*.tar
+
+# Tree-sitter grammar files (user should install via package)
+*.so
+*.dylib
+*.dll
