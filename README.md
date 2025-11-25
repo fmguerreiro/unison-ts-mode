@@ -111,21 +111,9 @@ Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or 
 
 ### Setup
 
-**1. Start UCM**
-
-The LSP server starts automatically when you run UCM:
-
-```bash
-ucm
-```
-
-This starts the LSP server on `127.0.0.1:5757` by default.
-
-**2. Configure your LSP client**
-
 **Using Eglot (built-in Emacs 29+):**
 
-LSP support is built-in. Just start eglot in a `.u` file:
+Eglot will automatically start UCM in headless mode when you open a `.u` file:
 
 ```elisp
 M-x eglot
@@ -137,9 +125,25 @@ Or enable automatically:
 (add-hook 'unison-ts-mode-hook 'eglot-ensure)
 ```
 
+If you prefer to manage UCM manually, start it before opening files:
+
+```bash
+ucm
+# or run in background
+ucm headless
+```
+
 **Using lsp-mode:**
 
-LSP support is built-in. Start lsp in a `.u` file:
+lsp-mode requires UCM to be running. Start UCM first:
+
+```bash
+ucm
+# or run in background
+ucm headless
+```
+
+Then start lsp in a `.u` file:
 
 ```elisp
 M-x lsp

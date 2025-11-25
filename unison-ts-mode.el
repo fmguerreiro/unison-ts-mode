@@ -44,10 +44,26 @@
 
 ;;; LSP Integration
 
+(defun unison-ts-mode--eglot-contact (_interactive)
+  "Contact function for eglot to connect to UCM LSP server.
+Starts UCM in headless mode if not already running."
+  (let ((port (or (getenv "UNISON_LSP_PORT") "5757")))
+    ;; Start UCM headless in background if not already running
+    (unless (ignore-errors
+              (delete-process
+               (make-network-process
+                :name "unison-lsp-check"
+                :host "127.0.0.1"
+                :service (string-to-number port)
+                :nowait nil)))
+      (start-process "ucm-headless" nil "ucm" "headless")
+      (sleep-for 1))
+    (list "127.0.0.1" (string-to-number port))))
+
 ;;;###autoload
 (with-eval-after-load 'eglot
   (add-to-list 'eglot-server-programs
-               '(unison-ts-mode "127.0.0.1" 5757)))
+               '(unison-ts-mode . unison-ts-mode--eglot-contact)))
 
 ;;;###autoload
 (with-eval-after-load 'lsp-mode
