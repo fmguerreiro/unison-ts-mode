@@ -11,7 +11,7 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 ## Requirements
 
 - Emacs 29+ (with native tree-sitter support)
-- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz)
+- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison)
 
 ## Installation
 
@@ -19,8 +19,7 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 
 ```elisp
 (add-to-list 'treesit-language-source-alist
-  '(unison "https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz"
-           "build/include-parser-in-src-control"))
+  '(unison "https://github.com/fmguerreiro/tree-sitter-unison"))
 ```
 
 Then `M-x treesit-install-language-grammar RET unison`.
@@ -54,8 +53,8 @@ Then `M-x treesit-install-language-grammar RET unison`.
 If you prefer to build the grammar manually:
 
 ```sh
-git clone https://github.com/fmguerreiro/tree-sitter-unison-kylegoetz.git
-cd tree-sitter-unison-kylegoetz
+git clone https://github.com/fmguerreiro/tree-sitter-unison.git
+cd tree-sitter-unison
 
 # Determine shared library extension
 if [ "$(uname)" = "Darwin" ]; then soext="dylib"
