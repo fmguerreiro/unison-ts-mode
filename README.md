@@ -4,6 +4,12 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 
 **Status**: Ready for MELPA submission. Once accepted, install with `M-x package-install RET unison-ts-mode`.
 
+## Quick Start
+
+1. Install the package (see [Installation](#installation))
+2. Open a `.u` file - you'll be prompted to install the tree-sitter grammar
+3. (Optional) Enable LSP: `M-x eglot` or `M-x lsp`
+
 ## Features
 
 - Syntax highlighting with tree-sitter (4 customizable levels)
@@ -21,29 +27,9 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 ## Requirements
 
 - Emacs 29+ (with native tree-sitter support)
-- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison)
+- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison) (auto-installed)
 
 ## Installation
-
-### Grammar
-
-The tree-sitter grammar will be installed automatically when you first open a `.u` file. You'll see a prompt: "Install Unison grammar for syntax highlighting?"
-
-To control this behavior, customize `unison-ts-grammar-install`:
-- `'prompt` (default): Ask before installing
-- `'auto`: Install automatically without prompting
-- `nil`: Never auto-install
-
-You can also install manually with `M-x unison-ts-install-grammar`.
-
-**Advanced: Custom grammar source**
-
-To use a fork or different branch:
-
-```elisp
-(setq unison-ts-grammar-repository "https://github.com/yourname/tree-sitter-unison")
-(setq unison-ts-grammar-revision "your-branch")  ; Optional
-```
 
 ### Package
 
@@ -69,9 +55,124 @@ To use a fork or different branch:
 (package! unison-ts-mode :recipe (:host github :repo "fmguerreiro/unison-ts-mode"))
 ```
 
+### Grammar
+
+The tree-sitter grammar installs automatically when you first open a `.u` file. Customize behavior with `unison-ts-grammar-install`:
+- `'prompt` (default): Ask before installing
+- `'auto`: Install automatically
+- `nil`: Never auto-install
+
+Manual install: `M-x unison-ts-install-grammar`
+
+**Custom grammar source:**
+
+```elisp
+(setq unison-ts-grammar-repository "https://github.com/yourname/tree-sitter-unison")
+(setq unison-ts-grammar-revision "your-branch")  ; Optional
+```
+
+## Configuration
+
+### Font-lock Levels
+
+Customize highlighting depth via `treesit-font-lock-level`:
+
+1. comment, doc, string, declaration, preprocessor, error
+2. keyword, type, constant
+3. function-call, variable
+4. bracket, operator, delimiter
+
+Apply changes: `M-x treesit-font-lock-recompute-features`
+
+### imenu Navigation
+
+Navigate to functions, types, and abilities:
+
+- `M-x imenu` - Jump to definition
+- `M-x which-function-mode` - Show current function in mode line
+- Works with helm-imenu, counsel-imenu, consult-imenu
+
+```elisp
+;; Auto-enable which-function-mode
+(add-hook 'unison-ts-mode-hook 'which-function-mode)
+```
+
+### LSP Support
+
+Requires [UCM](https://www.unison-lang.org/docs/install-instructions/). UCM auto-starts in headless mode when you open a `.u` file.
+
+**Eglot (built-in Emacs 29+):**
+
+```elisp
+(add-hook 'unison-ts-mode-hook 'eglot-ensure)
+```
+
+**lsp-mode:**
+
+```elisp
+(add-hook 'unison-ts-mode-hook 'lsp-deferred)
+```
+
+**Custom port:**
+
+```bash
+export UNISON_LSP_PORT=5758
+```
+
+**Windows:** LSP is disabled by default. Enable it:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('UNISON_LSP_ENABLED','true')
+```
+
+**Manual UCM:**
+
+```bash
+ucm headless
+```
+
+## Troubleshooting
+
+**Grammar installation fails:**
+
+Install build tools:
+```sh
+# macOS
+xcode-select --install
+
+# Debian/Ubuntu
+sudo apt-get install build-essential git
+
+# Fedora/RHEL
+sudo dnf install gcc git
+```
+
+**ABI version mismatch:**
+
+```sh
+tree-sitter generate --abi=13
+```
+
+**Grammar not found:**
+
+Check `~/.emacs.d/tree-sitter/` or `treesit-extra-load-path` contains the compiled grammar.
+
+**LSP connection refused:**
+
+- Verify `ucm` is in PATH: `which ucm`
+- Check port 5757: `lsof -i :5757` (macOS/Linux) or `netstat -an | findstr 5757` (Windows)
+- Start manually: `ucm headless`
+- Check logs: `*EGLOT events*` (eglot) or `*lsp-log*` (lsp-mode)
+
+**LSP features not working:**
+
+Ensure you're in a valid Unison codebase directory.
+
+## Advanced
+
 ### Manual Grammar Build
 
-If you prefer to build the grammar manually:
+If auto-install fails:
 
 ```sh
 git clone https://github.com/fmguerreiro/tree-sitter-unison.git
@@ -92,171 +193,13 @@ mkdir -p ~/.emacs.d/tree-sitter
 cp "libtree-sitter-unison.${soext}" ~/.emacs.d/tree-sitter/
 ```
 
-## Features
+### Syntax Tree Inspection
 
-- Syntax highlighting (4 customizable levels via `treesit-font-lock-level`)
-- Indentation
-- `treesit-explore-mode` support for syntax tree inspection
-- LSP integration (eglot and lsp-mode)
-- imenu support for quick navigation
-
-## Font-lock Levels
-
-Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or set `treesit-font-lock-level`:
-
-1. comment, doc, string, declaration, preprocessor, error
-2. keyword, type, constant
-3. function-call, variable
-4. bracket, operator, delimiter
-
-## Navigation with imenu
-
-`unison-ts-mode` provides imenu support for quick navigation within Unison files.
-
-### Usage
-
-- **Jump to definition**: `M-x imenu` then select item
-- **Show in speedbar**: `M-x speedbar`
-- **Current function in mode line**: `M-x which-function-mode`
-- **With completion frameworks**:
-  - Helm: `M-x helm-imenu`
-  - Ivy/Counsel: `M-x counsel-imenu`
-  - Consult: `M-x consult-imenu`
-
-### Indexed Items
-
-imenu indexes these Unison constructs:
-- Functions and value definitions
-- Type declarations
-- Ability declarations
-
-### Configuration
-
-```elisp
-;; Enable which-function-mode to show current function in mode line
-(add-hook 'unison-ts-mode-hook 'which-function-mode)
-```
-
-## LSP Support
-
-`unison-ts-mode` includes built-in LSP integration for IDE features like autocomplete, go-to-definition, hover documentation, and diagnostics.
-
-![LSP features in action](docs/lsp-demo.png)
-
-### Prerequisites
-
-- **UCM (Unison Codebase Manager)**: Install from https://www.unison-lang.org/docs/install-instructions/
-- UCM will be started automatically in headless mode when you open a `.u` file
-
-### Setup
-
-**Using Eglot (built-in Emacs 29+):**
-
-Eglot will automatically start UCM in headless mode when you open a `.u` file:
-
-```elisp
-M-x eglot
-```
-
-Or enable automatically:
-
-```elisp
-(add-hook 'unison-ts-mode-hook 'eglot-ensure)
-```
-
-If you prefer to manage UCM manually, start it before opening files:
-
-```bash
-ucm
-# or run in background
-ucm headless
-```
-
-**Using lsp-mode:**
-
-lsp-mode will automatically start UCM in headless mode when you open a `.u` file:
-
-```elisp
-M-x lsp
-```
-
-Or enable automatically:
-
-```elisp
-(add-hook 'unison-ts-mode-hook 'lsp-deferred)
-```
-
-If you prefer to manage UCM manually, start it before opening files:
-
-```bash
-ucm
-# or run in background
-ucm headless
-```
-
-### Configuration
-
-**Change LSP port:**
-
-Set the `UNISON_LSP_PORT` environment variable:
-
-```bash
-export UNISON_LSP_PORT=5758
-ucm
-```
-
-**Windows users:**
-
-The LSP is disabled by default on Windows. Enable it:
-
-```powershell
-[System.Environment]::SetEnvironmentVariable('UNISON_LSP_ENABLED','true')
-```
-
-### Troubleshooting LSP
-
-**Connection refused:**
-- UCM should auto-start, but if it fails, check if `ucm` is in your PATH: `which ucm`
-- Check if port 5757 is listening: `lsof -i :5757` (macOS/Linux) or `netstat -an | findstr 5757` (Windows)
-- Try starting UCM manually: `ucm headless`
-
-**No completions/diagnostics:**
-- LSP features depend on your current UCM path
-- Ensure you're in a valid Unison codebase directory
-
-**Check connection:**
-- Eglot: Check `*EGLOT events*` buffer for errors
-- lsp-mode: Check `*lsp-log*` buffer and run `M-x lsp-describe-session`
-
-## Troubleshooting
-
-**Installation fails:** The auto-installer requires git and a C compiler. On macOS, install Xcode Command Line Tools:
-```sh
-xcode-select --install
-```
-
-On Linux, install build essentials:
-```sh
-# Debian/Ubuntu
-sudo apt-get install build-essential git
-
-# Fedora/RHEL
-sudo dnf install gcc git
-```
-
-**ABI version mismatch:** If you encounter ABI compatibility errors, rebuild the grammar with the `--abi=13` flag:
-
-```sh
-tree-sitter generate --abi=13
-```
-
-**Manual installation:** If auto-install doesn't work, you can install manually following the instructions in the "Manual Grammar Build" section below.
-
-**Grammar not found:** Ensure the compiled grammar is in a directory listed in `treesit-extra-load-path` or the default `~/.emacs.d/tree-sitter/`.
+Use `M-x treesit-explore-mode` to inspect the syntax tree while developing or debugging.
 
 ## Contributing
 
-Contributions welcome. Please follow standard GitHub workflow for pull requests.
+Contributions welcome via GitHub pull requests.
 
 ## License
 
