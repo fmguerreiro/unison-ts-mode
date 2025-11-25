@@ -2,6 +2,16 @@
 
 Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 
+**Status**: Ready for MELPA submission. Once accepted, install with `M-x package-install RET unison-ts-mode`.
+
+## Features
+
+- Syntax highlighting with tree-sitter (4 customizable levels)
+- Automatic indentation for all Unison constructs
+- imenu support for navigation (functions, types, abilities)
+- LSP integration (eglot and lsp-mode)
+- Auto-install of tree-sitter grammar
+
 ## Screenshots
 
 <img width="431" alt="Syntax highlighting example 1" src="https://github.com/fmguerreiro/unison-ts-mode/assets/14042481/1ca84b2f-0cda-41d0-9885-6c3758fdd46c">
