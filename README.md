@@ -87,6 +87,7 @@ cp "libtree-sitter-unison.${soext}" ~/.emacs.d/tree-sitter/
 - Syntax highlighting (4 customizable levels via `treesit-font-lock-level`)
 - Indentation
 - `treesit-explore-mode` support for syntax tree inspection
+- LSP integration (eglot and lsp-mode)
 
 ## Font-lock Levels
 
@@ -96,6 +97,90 @@ Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or 
 2. keyword, type, constant
 3. function-call, variable
 4. bracket, operator, delimiter
+
+## LSP Support
+
+`unison-ts-mode` includes built-in LSP integration for IDE features like autocomplete, go-to-definition, hover documentation, and diagnostics.
+
+### Prerequisites
+
+- **UCM (Unison Codebase Manager)**: Install from https://www.unison-lang.org/docs/install-instructions/
+- **Running UCM instance**: The LSP server runs automatically when UCM starts
+
+### Setup
+
+**1. Start UCM**
+
+The LSP server starts automatically when you run UCM:
+
+```bash
+ucm
+```
+
+This starts the LSP server on `127.0.0.1:5757` by default.
+
+**2. Configure your LSP client**
+
+**Using Eglot (built-in Emacs 29+):**
+
+LSP support is built-in. Just start eglot in a `.u` file:
+
+```elisp
+M-x eglot
+```
+
+Or enable automatically:
+
+```elisp
+(add-hook 'unison-ts-mode-hook 'eglot-ensure)
+```
+
+**Using lsp-mode:**
+
+LSP support is built-in. Start lsp in a `.u` file:
+
+```elisp
+M-x lsp
+```
+
+Or enable automatically:
+
+```elisp
+(add-hook 'unison-ts-mode-hook 'lsp-deferred)
+```
+
+### Configuration
+
+**Change LSP port:**
+
+Set the `UNISON_LSP_PORT` environment variable:
+
+```bash
+export UNISON_LSP_PORT=5758
+ucm
+```
+
+**Windows users:**
+
+The LSP is disabled by default on Windows. Enable it:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('UNISON_LSP_ENABLED','true')
+```
+
+### Troubleshooting LSP
+
+**Connection refused:**
+- Ensure UCM is running (`ucm` in a terminal)
+- Check if port 5757 is listening: `lsof -i :5757` (macOS/Linux) or `netstat -an | findstr 5757` (Windows)
+
+**No completions/diagnostics:**
+- LSP features depend on your current UCM path
+- Ensure you're in a valid Unison codebase directory
+
+**Check connection:**
+- Eglot: Check `*EGLOT events*` buffer for errors
+- lsp-mode: Check `*lsp-log*` buffer and run `M-x lsp-describe-session`
 
 ## Troubleshooting
 

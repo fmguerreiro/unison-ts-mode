@@ -42,5 +42,24 @@
 ;; for tree-sitter-debug-mode
 ;; (add-to-list 'tree-sitter-major-mode-language-alist '(unison-ts-mode . unison))
 
+;;; LSP Integration
+
+;;;###autoload
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs
+               '(unison-ts-mode "127.0.0.1" 5757)))
+
+;;;###autoload
+(with-eval-after-load 'lsp-mode
+  (add-to-list 'lsp-language-id-configuration '(unison-ts-mode . "unison"))
+
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-tcp-connection (lambda (_) '("localhost" 5757)))
+    :activation-fn (lsp-activate-on "unison")
+    :server-id 'unison-lsp
+    :major-modes '(unison-ts-mode)
+    :priority -1)))
+
 (provide 'unison-ts-mode)
 ;;; unison-ts-mode.el ends here

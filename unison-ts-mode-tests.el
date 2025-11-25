@@ -709,6 +709,17 @@
       (forward-line 1)
       (should (= (current-indentation) first-indent)))))
 
+(ert-deftest unison-ts-indent/let-multiple-bindings-no-cascade ()
+  "Multiple let bindings should all align at the same column, not cascade."
+  (unison-ts-mode-tests--with-buffer "foo x =\n  let\n    a = 1\n    b = 2\n    c = 3"
+    (goto-char (point-min))
+    (forward-line 2)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 4))))
+
 (ert-deftest unison-ts-indent/deeply-nested ()
   "Deeply nested expressions should maintain proper indentation."
   (unison-ts-mode-tests--with-buffer "foo x =\n  if x\n  then\n    let\n      y = 1\n      y\n  else 0"
@@ -723,6 +734,140 @@
     (forward-line 1)
     (should (= (current-indentation) 2))))
 
+(ert-deftest unison-ts-indent/cases-expression ()
+  "Cases expression arms should be indented."
+  (unison-ts-mode-tests--with-buffer "bar = cases\n  Low -> \"low\"\n  Medium -> \"med\"\n  High -> \"high\""
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/cases-with-effects ()
+  "Cases with effect patterns should be indented."
+  (unison-ts-mode-tests--with-buffer "handler state = cases\n  {State.get -> resume} -> handler state (resume state)\n  {pure} -> (pure, state)"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/cases-multiline-body ()
+  "Cases with multiline body should indent the body further."
+  (unison-ts-mode-tests--with-buffer "process = cases\n  Some x ->\n    let\n      y = x + 1\n      z = y * 2\n    z\n  None -> 0"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 6))
+    (forward-line 1)
+    (should (= (current-indentation) 6))))
+
+(ert-deftest unison-ts-indent/cases-inside-let ()
+  "Cases expression inside let should be indented properly."
+  (unison-ts-mode-tests--with-buffer "transform x =\n  let\n    f = cases\n      Just v -> v\n      Nothing -> 0\n  f x"
+    (goto-char (point-min))
+    (forward-line 2)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 6))
+    (forward-line 1)
+    (should (= (current-indentation) 6))))
+
+(ert-deftest unison-ts-indent/handle-with-cases ()
+  "Handle...with cases should indent properly."
+  (unison-ts-mode-tests--with-buffer "process = handle\n  doSomething\nwith cases\n  {IO.getLine -> k} -> k \"input\"\n  {pure result} -> result"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 2)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/use-clause ()
+  "Use clause in function body should be indented."
+  (unison-ts-mode-tests--with-buffer "compute n =\n  use Nat + - *\n  use List map\n  n + 1"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/use-clause-in-let ()
+  "Use clause in let block should be indented."
+  (unison-ts-mode-tests--with-buffer "foo =\n  let\n    use Nat +\n    x = 1 + 2\n  x"
+    (goto-char (point-min))
+    (forward-line 2)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 4))))
+
+(ert-deftest unison-ts-indent/tuple-literal ()
+  "Tuple literals on multiple lines should indent."
+  (unison-ts-mode-tests--with-buffer "pair = (\n  x,\n  y\n)"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/list-literal ()
+  "List literals on multiple lines should indent."
+  (unison-ts-mode-tests--with-buffer "items = [\n  1,\n  2,\n  3\n]"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/function-application-multiline ()
+  "Function application on multiple lines should indent arguments."
+  (unison-ts-mode-tests--with-buffer "result = myFunction\n  arg1\n  arg2\n  arg3"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 2))))
+
+(ert-deftest unison-ts-indent/nested-cases-in-match ()
+  "Cases expression in match arm should indent correctly."
+  (unison-ts-mode-tests--with-buffer "process = match input with\n  Some handler ->\n    cases\n      {get} -> resume state\n      {pure} -> result\n  None -> defaultHandler"
+    (goto-char (point-min))
+    (forward-line 1)
+    (should (= (current-indentation) 2))
+    (forward-line 1)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 6))
+    (forward-line 1)
+    (should (= (current-indentation) 6))))
+
+(ert-deftest unison-ts-indent/complex-nesting ()
+  "Complex nesting with let, cases, and match should maintain indentation."
+  (unison-ts-mode-tests--with-buffer "foo x =\n  let\n    handler = cases\n      Some y ->\n        match y with\n          Just z -> z\n          Nothing -> 0\n      None -> -1\n  handler x"
+    (goto-char (point-min))
+    (forward-line 2)
+    (should (= (current-indentation) 4))
+    (forward-line 1)
+    (should (= (current-indentation) 6))
+    (forward-line 1)
+    (should (= (current-indentation) 8))
+    (forward-line 1)
+    (should (= (current-indentation) 10))
+    (forward-line 1)
+    (should (= (current-indentation) 10))))
+
 ;;; Mode activation tests
 
 (ert-deftest unison-ts-mode/activates-for-u-files ()
@@ -734,6 +879,20 @@
   "Mode should activate for .unison files."
   (require 'unison-ts-mode)
   (should (eq (cdr (assoc "\\.unison\\'" auto-mode-alist)) 'unison-ts-mode)))
+
+;;; LSP integration tests
+
+(ert-deftest unison-ts-mode-lsp/eglot-registered ()
+  "unison-ts-mode should be registered with eglot."
+  (require 'unison-ts-mode)
+  (when (require 'eglot nil t)
+    (should (assoc 'unison-ts-mode eglot-server-programs))))
+
+(ert-deftest unison-ts-mode-lsp/lsp-mode-registered ()
+  "unison-ts-mode should be registered with lsp-mode."
+  (require 'unison-ts-mode)
+  (when (require 'lsp-mode nil t)
+    (should (assoc 'unison-ts-mode lsp-language-id-configuration))))
 
 ;;; ADT constructor tests
 
