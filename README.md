@@ -107,7 +107,7 @@ Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or 
 ### Prerequisites
 
 - **UCM (Unison Codebase Manager)**: Install from https://www.unison-lang.org/docs/install-instructions/
-- **Running UCM instance**: The LSP server runs automatically when UCM starts
+- UCM will be started automatically in headless mode when you open a `.u` file
 
 ### Setup
 
@@ -135,15 +135,7 @@ ucm headless
 
 **Using lsp-mode:**
 
-lsp-mode requires UCM to be running. Start UCM first:
-
-```bash
-ucm
-# or run in background
-ucm headless
-```
-
-Then start lsp in a `.u` file:
+lsp-mode will automatically start UCM in headless mode when you open a `.u` file:
 
 ```elisp
 M-x lsp
@@ -153,6 +145,14 @@ Or enable automatically:
 
 ```elisp
 (add-hook 'unison-ts-mode-hook 'lsp-deferred)
+```
+
+If you prefer to manage UCM manually, start it before opening files:
+
+```bash
+ucm
+# or run in background
+ucm headless
 ```
 
 ### Configuration
@@ -177,8 +177,9 @@ The LSP is disabled by default on Windows. Enable it:
 ### Troubleshooting LSP
 
 **Connection refused:**
-- Ensure UCM is running (`ucm` in a terminal)
+- UCM should auto-start, but if it fails, check if `ucm` is in your PATH: `which ucm`
 - Check if port 5757 is listening: `lsof -i :5757` (macOS/Linux) or `netstat -an | findstr 5757` (Windows)
+- Try starting UCM manually: `ucm headless`
 
 **No completions/diagnostics:**
 - LSP features depend on your current UCM path

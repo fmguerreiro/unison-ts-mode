@@ -71,7 +71,20 @@ Starts UCM in headless mode if not already running."
 
   (lsp-register-client
    (make-lsp-client
-    :new-connection (lsp-tcp-connection (lambda (_) '("localhost" 5757)))
+    :new-connection (lsp-tcp-connection
+                     (lambda (port)
+                       (let ((lsp-port (or (getenv "UNISON_LSP_PORT") "5757")))
+                         ;; Start UCM headless if not already running
+                         (unless (ignore-errors
+                                   (delete-process
+                                    (make-network-process
+                                     :name "unison-lsp-check-lsp-mode"
+                                     :host "127.0.0.1"
+                                     :service (string-to-number lsp-port)
+                                     :nowait nil)))
+                           (start-process "ucm-headless-lsp-mode" nil "ucm" "headless")
+                           (sleep-for 1))
+                         (cons "localhost" (string-to-number lsp-port)))))
     :activation-fn (lsp-activate-on "unison")
     :server-id 'unison-lsp
     :major-modes '(unison-ts-mode)
