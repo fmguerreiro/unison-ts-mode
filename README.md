@@ -17,12 +17,14 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 
 ### Grammar
 
-```elisp
-(add-to-list 'treesit-language-source-alist
-  '(unison "https://github.com/fmguerreiro/tree-sitter-unison"))
-```
+The tree-sitter grammar will be installed automatically when you first open a `.u` file. You'll see a prompt: "Install Unison grammar for syntax highlighting?"
 
-Then `M-x treesit-install-language-grammar RET unison`.
+To control this behavior, customize `unison-ts-grammar-install`:
+- `'prompt` (default): Ask before installing
+- `'auto`: Install automatically without prompting
+- `nil`: Never auto-install
+
+You can also install manually with `M-x unison-ts-install-grammar`.
 
 ### Package
 
@@ -88,11 +90,27 @@ Customize highlighting depth with `M-x treesit-font-lock-recompute-features` or 
 
 ## Troubleshooting
 
+**Installation fails:** The auto-installer requires git and a C compiler. On macOS, install Xcode Command Line Tools:
+```sh
+xcode-select --install
+```
+
+On Linux, install build essentials:
+```sh
+# Debian/Ubuntu
+sudo apt-get install build-essential git
+
+# Fedora/RHEL
+sudo dnf install gcc git
+```
+
 **ABI version mismatch:** If you encounter ABI compatibility errors, rebuild the grammar with the `--abi=13` flag:
 
 ```sh
 tree-sitter generate --abi=13
 ```
+
+**Manual installation:** If auto-install doesn't work, you can install manually following the instructions in the "Manual Grammar Build" section below.
 
 **Grammar not found:** Ensure the compiled grammar is in a directory listed in `treesit-extra-load-path` or the default `~/.emacs.d/tree-sitter/`.
 

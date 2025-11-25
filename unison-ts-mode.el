@@ -23,6 +23,7 @@
 
 (require 'unison-ts-syntax-table)
 (require 'unison-ts-setup)
+(require 'unison-ts-install)
 
 ;;;###autoload
 (define-derived-mode unison-ts-mode prog-mode "Unison"
@@ -30,7 +31,8 @@
   :group 'unison-ts
   :syntax-table unison-ts-syntax-table
 
-  (when (treesit-ready-p 'unison)
+  (when (and (unison-ts-ensure-grammar)
+             (treesit-ready-p 'unison))
     (treesit-parser-create 'unison)
     (unison-ts-setup)))
 
