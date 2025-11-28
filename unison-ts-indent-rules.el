@@ -1,21 +1,11 @@
-;;; unison-ts-indent-rules.el --- Description -*- lexical-binding: t; -*-
-;;
-;; Copyright (C) 2023 Filipe Guerreiro
-;;
-;; Author: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
-;; Maintainer: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
-;; Created: November 23, 2023
-;; Modified: November 23, 2023
-;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
-;; Homepage: https://github.com/fmguerreiro/unison-ts-indent-rules
-;; Package-Requires: ((emacs "24.3"))
-;;
+;;; unison-ts-indent-rules.el --- Indentation rules for unison-ts-mode -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2023-2024 Filipe Guerreiro
+
 ;; This file is not part of GNU Emacs.
-;;
+
 ;;; Commentary:
-;;
-;;  Description
+;; Defines tree-sitter indentation rules for Unison mode.
 ;;
 ;;; Code:
 
@@ -23,7 +13,8 @@
 
 (defun unison-ts--let-binding-anchor (_node parent bol &rest _)
   "Anchor for let bindings.
-Computes indentation from containing term_definition."
+Uses PARENT to find the containing term_definition.
+Computes indentation from containing term_definition, or returns BOL."
   (let* ((exp-let (unison-ts--find-exp-let-ancestor parent))
          (outer-term-def (when exp-let (treesit-node-parent exp-let))))
     (if outer-term-def
@@ -41,7 +32,8 @@ Computes indentation from containing term_definition."
     current))
 
 (defun unison-ts--inside-let-binding-p (node parent _bol &rest _)
-  "Check if NODE is part of a term_declaration inside exp_let."
+  "Check if NODE is part of a term_declaration inside exp_let.
+Uses PARENT to find the exp_let ancestor."
   (let ((exp-let (unison-ts--find-exp-let-ancestor parent)))
     (when exp-let
       (let ((term-decl-ancestor node))
@@ -55,7 +47,7 @@ Computes indentation from containing term_definition."
 
 (defun unison-ts--let-binding-anchor-v2 (_node parent bol &rest _)
   "Anchor for let bindings.
-Find the containing term_definition and compute indent."
+Uses PARENT to find the containing term_definition and compute indent, or returns BOL."
   (let ((exp-let (unison-ts--find-exp-let-ancestor parent)))
     (if exp-let
         (let ((outer-term-def (treesit-node-parent exp-let)))

@@ -1,5 +1,9 @@
 ;;; unison-ts-install.el --- Grammar installation for unison-ts-mode -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2023-2024 Filipe Guerreiro
+
+;; This file is not part of GNU Emacs.
+
 ;;; Commentary:
 ;; Handles automatic installation of the tree-sitter grammar for Unison.
 

@@ -1,21 +1,11 @@
-;;; unison-ts-setup.el --- Description -*- lexical-binding: t; -*-
-;;
-;; Copyright (C) 2023 Filipe Guerreiro
-;;
-;; Author: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
-;; Maintainer: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
-;; Created: November 11, 2023
-;; Modified: November 11, 2023
-;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
-;; Homepage: https://github.com/fmguerreiro/unison-ts-setup
-;; Package-Requires: ((emacs "24.3"))
-;;
+;;; unison-ts-setup.el --- Setup for unison-ts-mode -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2023-2024 Filipe Guerreiro
+
 ;; This file is not part of GNU Emacs.
-;;
+
 ;;; Commentary:
-;;
-;;  Description
+;; Configures tree-sitter settings for Unison mode.
 ;;
 ;;; Code:
 
