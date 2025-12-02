@@ -49,6 +49,7 @@
 (require 'unison-ts-syntax-table)
 (require 'unison-ts-setup)
 (require 'unison-ts-install)
+(require 'unison-ts-repl)
 
 ;;; Imenu
 
@@ -77,11 +78,24 @@
 Each entry is (CATEGORY REGEXP PRED NAME-FN).
 See `treesit-simple-imenu-settings' for details.")
 
+(defvar unison-ts-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c u r") #'unison-ts-repl)
+    (define-key map (kbd "C-c u a") #'unison-ts-add)
+    (define-key map (kbd "C-c u u") #'unison-ts-update)
+    (define-key map (kbd "C-c u t") #'unison-ts-test)
+    (define-key map (kbd "C-c u x") #'unison-ts-run)
+    (define-key map (kbd "C-c u w") #'unison-ts-watch)
+    (define-key map (kbd "C-c u l") #'unison-ts-load)
+    map)
+  "Keymap for `unison-ts-mode'.")
+
 ;;;###autoload
 (define-derived-mode unison-ts-mode prog-mode "Unison"
   "Major mode for editing Unison, powered by tree-sitter."
   :group 'unison-ts
   :syntax-table unison-ts-syntax-table
+  :keymap unison-ts-mode-map
 
   (when (and (unison-ts-ensure-grammar)
              (treesit-ready-p 'unison))
