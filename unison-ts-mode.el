@@ -99,15 +99,18 @@ See `treesit-simple-imenu-settings' for details.")
 
 ;;; LSP Integration
 
-;; Optional LSP integration using `with-eval-after-load' to avoid
-;; requiring eglot/lsp-mode as dependencies.  This is the standard
-;; pattern for optional integrations in tree-sitter modes.
+(defvar eglot-server-programs)
+(defvar lsp-language-id-configuration)
+
+(declare-function lsp-register-client "ext:lsp-mode")
+(declare-function make-lsp-client "ext:lsp-mode")
+(declare-function lsp-tcp-connection "ext:lsp-mode")
+(declare-function lsp-activate-on "ext:lsp-mode")
 
 (defun unison-ts-mode--eglot-contact (_interactive)
   "Contact function for eglot to connect to UCM LSP server.
 Starts UCM in headless mode if not already running."
   (let ((port (or (getenv "UNISON_LSP_PORT") "5757")))
-    ;; Start UCM headless in background if not already running
     (unless (ignore-errors
               (delete-process
                (make-network-process
@@ -120,20 +123,28 @@ Starts UCM in headless mode if not already running."
     (list "127.0.0.1" (string-to-number port))))
 
 ;;;###autoload
-(with-eval-after-load 'eglot
+(defun unison-ts-mode-setup-eglot ()
+  "Set up eglot for `unison-ts-mode'.
+Call this from your init file:
+  (with-eval-after-load \\='unison-ts-mode
+    (with-eval-after-load \\='eglot
+      (unison-ts-mode-setup-eglot)))"
   (add-to-list 'eglot-server-programs
                '(unison-ts-mode . unison-ts-mode--eglot-contact)))
 
 ;;;###autoload
-(with-eval-after-load 'lsp-mode
+(defun unison-ts-mode-setup-lsp ()
+  "Set up lsp-mode for `unison-ts-mode'.
+Call this from your init file:
+  (with-eval-after-load \\='unison-ts-mode
+    (with-eval-after-load \\='lsp-mode
+      (unison-ts-mode-setup-lsp)))"
   (add-to-list 'lsp-language-id-configuration '(unison-ts-mode . "unison"))
-
   (lsp-register-client
    (make-lsp-client
     :new-connection (lsp-tcp-connection
                      (lambda (_port)
                        (let ((lsp-port (or (getenv "UNISON_LSP_PORT") "5757")))
-                         ;; Start UCM headless if not already running
                          (unless (ignore-errors
                                    (delete-process
                                     (make-network-process

@@ -42,14 +42,12 @@
   '((or) (and) (pipe) (operator) (kw_equals)
     (type_signature_colon) (arrow_symbol)))
 
-(defvar unison-ts-font-lock)
-
 ;; possible faces
 ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Faces-for-Font-Lock.html
 ;; syntax
 ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Pattern-Matching.html
-(setq unison-ts-font-lock
-      `(:feature error
+(defvar unison-ts-font-lock
+  `(:feature error
         :override t
         :language unison
         ((ERROR) @font-lock-warning-face)
@@ -137,7 +135,8 @@
         :feature string
         :override t
         :language unison
-        ([(literal_char) (literal_text)] @font-lock-string-face)))
+        ([(literal_char) (literal_text)] @font-lock-string-face))
+  "Tree-sitter font-lock settings for `unison-ts-mode'.")
 
 (provide 'unison-ts-font-lock)
 

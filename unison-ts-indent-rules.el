@@ -22,7 +22,8 @@
 ;;
 ;;; Code:
 
-(setq-default tab-width 2)
+(defvar unison-ts-indent-offset 2
+  "Number of spaces for each indentation step in `unison-ts-mode'.")
 
 (defun unison-ts--let-binding-anchor (_node parent bol &rest _)
   "Anchor for let bindings.
@@ -60,7 +61,8 @@ Uses PARENT to find the exp_let ancestor."
 
 (defun unison-ts--let-binding-anchor-v2 (_node parent bol &rest _)
   "Anchor for let bindings.
-Uses PARENT to find the containing term_definition and compute indent, or returns BOL."
+Uses PARENT to find the containing term_definition and compute indent.
+Returns BOL if no term_definition is found."
   (let ((exp-let (unison-ts--find-exp-let-ancestor parent)))
     (if exp-let
         (let ((outer-term-def (treesit-node-parent exp-let)))
@@ -72,43 +74,44 @@ Uses PARENT to find the containing term_definition and compute indent, or return
             bol))
       bol)))
 
-(defvar unison-ts-indent-rules)
-(setq unison-ts-indent-rules
-      `((unison
-         ((parent-is "unison") column-0 0)
+(defvar unison-ts-indent-rules
+  `((unison
+     ((parent-is "unison") column-0 0)
 
-         ((and (node-is "kw_let") (parent-is "exp_let"))
-          unison-ts--let-binding-anchor ,tab-width)
+     ((and (node-is "kw_let") (parent-is "exp_let"))
+      unison-ts--let-binding-anchor ,unison-ts-indent-offset)
 
-         ((and (parent-is "exp_let") (not (node-is "kw_let")))
-          unison-ts--let-binding-anchor ,(* 2 tab-width))
+     ((and (parent-is "exp_let") (not (node-is "kw_let")))
+      unison-ts--let-binding-anchor ,(* 2 unison-ts-indent-offset))
 
-         ((and (parent-is "term_definition") (node-is "pattern"))
-          parent-bol ,tab-width)
+     ((and (parent-is "term_definition") (node-is "pattern"))
+      parent-bol ,unison-ts-indent-offset)
 
-         ((parent-is "type_declaration") parent-bol ,tab-width)
+     ((parent-is "type_declaration") parent-bol ,unison-ts-indent-offset)
 
-         ((parent-is "ability_declaration") parent-bol ,tab-width)
+     ((parent-is "ability_declaration") parent-bol ,unison-ts-indent-offset)
 
-         ((node-is "kw_then") parent 0)
-         ((node-is "kw_else") parent 0)
+     ((node-is "kw_then") parent 0)
+     ((node-is "kw_else") parent 0)
 
-         ((parent-is "exp_if") parent-bol ,tab-width)
+     ((parent-is "exp_if") parent-bol ,unison-ts-indent-offset)
 
-         (unison-ts--inside-let-binding-p unison-ts--let-binding-anchor-v2 ,(* 2 tab-width))
+     (unison-ts--inside-let-binding-p
+      unison-ts--let-binding-anchor-v2 ,(* 2 unison-ts-indent-offset))
 
-         ((parent-is "tuple_or_parenthesized") parent-bol ,tab-width)
-         ((parent-is "literal_list") parent-bol ,tab-width)
-         ((parent-is "delay_block") parent-bol ,tab-width)
-         ((parent-is "nested") parent-bol ,tab-width)
-         ((parent-is "tuple_pattern") parent-bol ,tab-width)
-         ((parent-is "function_application") parent-bol ,tab-width)
-         ((parent-is "constructor") parent-bol ,tab-width)
-         ((parent-is "type_signature") parent-bol ,tab-width)
+     ((parent-is "tuple_or_parenthesized") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "literal_list") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "delay_block") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "nested") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "tuple_pattern") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "function_application") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "constructor") parent-bol ,unison-ts-indent-offset)
+     ((parent-is "type_signature") parent-bol ,unison-ts-indent-offset)
 
-         ((parent-is "ERROR") prev-line ,tab-width)
+     ((parent-is "ERROR") prev-line ,unison-ts-indent-offset)
 
-         (no-node parent 0))))
+     (no-node parent 0)))
+  "Tree-sitter indentation rules for `unison-ts-mode'.")
 
 (provide 'unison-ts-indent-rules)
 

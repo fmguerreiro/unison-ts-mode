@@ -104,12 +104,18 @@ Requires [UCM](https://www.unison-lang.org/docs/install-instructions/). UCM auto
 **Eglot (built-in Emacs 29+):**
 
 ```elisp
+(with-eval-after-load 'unison-ts-mode
+  (with-eval-after-load 'eglot
+    (unison-ts-mode-setup-eglot)))
 (add-hook 'unison-ts-mode-hook 'eglot-ensure)
 ```
 
 **lsp-mode:**
 
 ```elisp
+(with-eval-after-load 'unison-ts-mode
+  (with-eval-after-load 'lsp-mode
+    (unison-ts-mode-setup-lsp)))
 (add-hook 'unison-ts-mode-hook 'lsp-deferred)
 ```
 
