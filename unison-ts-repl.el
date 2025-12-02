@@ -26,6 +26,7 @@
 (require 'comint)
 (require 'compile)
 (require 'project)
+(require 'treesit)
 
 (defgroup unison-ts-repl nil
   "UCM integration for Unison."
@@ -191,6 +192,33 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
     (unison-ts--send-to-repl (format "load %s" (file-relative-name
                                                  buffer-file-name
                                                  (unison-ts-project-root))))))
+
+;;;###autoload
+(defun unison-ts-send-region (start end)
+  "Send the region between START and END to the UCM REPL."
+  (interactive "r")
+  (unless (use-region-p)
+    (user-error "No region active"))
+  (let ((text (buffer-substring-no-properties start end)))
+    (unison-ts--send-to-repl text)))
+
+(defun unison-ts--definition-node-p (node)
+  "Return non-nil if NODE is a Unison definition."
+  (member (treesit-node-type node)
+          '("term_declaration" "type_declaration" "ability_declaration")))
+
+;;;###autoload
+(defun unison-ts-send-definition ()
+  "Send the definition at point to the UCM REPL."
+  (interactive)
+  (let ((node (treesit-node-at (point))))
+    (unless node
+      (user-error "No tree-sitter node at point"))
+    (let ((def-node (treesit-parent-until node #'unison-ts--definition-node-p t)))
+      (unless def-node
+        (user-error "Point is not within a definition"))
+      (let ((text (treesit-node-text def-node t)))
+        (unison-ts--send-to-repl text)))))
 
 (provide 'unison-ts-repl)
 

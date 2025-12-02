@@ -51,6 +51,8 @@
 ;;   C-c u x - Run a term
 ;;   C-c u w - Watch current file
 ;;   C-c u l - Load current file
+;;   C-c u e - Send region to REPL
+;;   C-c u d - Send definition at point to REPL
 ;;
 ;; Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
 
@@ -97,6 +99,8 @@ See `treesit-simple-imenu-settings' for details.")
     (define-key map (kbd "C-c u x") #'unison-ts-run)
     (define-key map (kbd "C-c u w") #'unison-ts-watch)
     (define-key map (kbd "C-c u l") #'unison-ts-load)
+    (define-key map (kbd "C-c u e") #'unison-ts-send-region)
+    (define-key map (kbd "C-c u d") #'unison-ts-send-definition)
     map)
   "Keymap for `unison-ts-mode'.")
 
@@ -110,6 +114,9 @@ See `treesit-simple-imenu-settings' for details.")
      ["Update" unison-ts-update]
      ["Load" unison-ts-load :active buffer-file-name]
      ["Watch" unison-ts-watch :active buffer-file-name]
+     "---"
+     ["Send Region" unison-ts-send-region :active (use-region-p)]
+     ["Send Definition" unison-ts-send-definition]
      "---"
      ["Test..." unison-ts-test]
      ["Run..." unison-ts-run])))
