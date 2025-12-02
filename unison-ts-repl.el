@@ -56,6 +56,12 @@ Falls back to `project-root' or `default-directory'."
   "Return the name of the current Unison project."
   (file-name-nondirectory (directory-file-name (unison-ts-project-root))))
 
+(defun unison-ts--ensure-ucm ()
+  "Ensure UCM executable is available.
+Signals an error if UCM is not found."
+  (unless (executable-find unison-ts-ucm-executable)
+    (user-error "UCM not found. Install from https://unison-lang.org")))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
