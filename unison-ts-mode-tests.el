@@ -1273,5 +1273,44 @@
         (should (assoc "Types" index))
         (should (assoc "Abilities" index))))))
 
+;;; REPL integration tests
+
+(ert-deftest unison-ts-repl/project-root-fallback ()
+  "Project root should fall back to default-directory."
+  (require 'unison-ts-repl)
+  (let ((default-directory "/tmp/"))
+    (should (equal (unison-ts-project-root) "/tmp/"))))
+
+(ert-deftest unison-ts-repl/project-name ()
+  "Project name should be directory name."
+  (require 'unison-ts-repl)
+  (let ((default-directory "/tmp/my-project/"))
+    (should (equal (unison-ts-project-name) "my-project"))))
+
+(ert-deftest unison-ts-repl/buffer-name-format ()
+  "REPL buffer name should include project name."
+  (require 'unison-ts-repl)
+  (let ((default-directory "/tmp/my-project/"))
+    (should (equal (unison-ts-repl--buffer-name) "*ucm: my-project*"))))
+
+(ert-deftest unison-ts-repl/keymap-defined ()
+  "Mode keymap should have UCM bindings."
+  (require 'unison-ts-mode)
+  (should (keymapp unison-ts-mode-map))
+  (should (lookup-key unison-ts-mode-map (kbd "C-c u r")))
+  (should (lookup-key unison-ts-mode-map (kbd "C-c u a")))
+  (should (lookup-key unison-ts-mode-map (kbd "C-c u t"))))
+
+(ert-deftest unison-ts-repl/commands-defined ()
+  "UCM command functions should be defined."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-repl))
+  (should (fboundp 'unison-ts-add))
+  (should (fboundp 'unison-ts-update))
+  (should (fboundp 'unison-ts-test))
+  (should (fboundp 'unison-ts-run))
+  (should (fboundp 'unison-ts-watch))
+  (should (fboundp 'unison-ts-load)))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
