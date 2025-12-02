@@ -36,11 +36,21 @@
 ;; - imenu support for navigation
 ;; - LSP integration (eglot and lsp-mode)
 ;; - Auto-install of tree-sitter grammar
+;; - UCM (Unison Codebase Manager) integration with REPL and commands
 ;;
 ;; Usage:
 ;; The mode is automatically activated for .u and .unison files.
 ;; For LSP support, install UCM (Unison Codebase Manager) and enable
 ;; eglot or lsp-mode.
+;;
+;; UCM Keybindings (under C-c u prefix):
+;;   C-c u r - Open UCM REPL
+;;   C-c u a - Add definitions from current file
+;;   C-c u u - Update definitions
+;;   C-c u t - Run tests
+;;   C-c u x - Run a term
+;;   C-c u w - Watch current file
+;;   C-c u l - Load current file
 ;;
 ;; Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
 
