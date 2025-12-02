@@ -245,6 +245,14 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
                                                  buffer-file-name
                                                  (unison-ts-project-root))))))
 
+(defun unison-ts--send-code-to-repl (code)
+  "Send CODE to UCM by writing to a temp file and loading it."
+  (let* ((root (unison-ts-project-root))
+         (temp-file (expand-file-name ".scratch.u" root)))
+    (with-temp-file temp-file
+      (insert code))
+    (unison-ts--send-to-repl (format "load %s" (file-relative-name temp-file root)))))
+
 ;;;###autoload
 (defun unison-ts-send-region (start end)
   "Send the region between START and END to the UCM REPL."
@@ -252,7 +260,7 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
   (unless (use-region-p)
     (user-error "No region active"))
   (let ((text (buffer-substring-no-properties start end)))
-    (unison-ts--send-to-repl text)))
+    (unison-ts--send-code-to-repl text)))
 
 (defun unison-ts--definition-node-p (node)
   "Return non-nil if NODE is a Unison definition."
@@ -270,7 +278,7 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
       (unless def-node
         (user-error "Point is not within a definition"))
       (let ((text (treesit-node-text def-node t)))
-        (unison-ts--send-to-repl text)))))
+        (unison-ts--send-code-to-repl text)))))
 
 (provide 'unison-ts-repl)
 
