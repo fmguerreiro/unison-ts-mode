@@ -15,6 +15,7 @@ emacs --batch --no-site-file -L . \
   unison-ts-setup.el \
   unison-ts-syntax-table.el \
   unison-ts-install.el \
+  unison-ts-repl.el \
   2>&1 | tee /tmp/byte-compile.log
 
 # Check for warnings (excluding "newer than byte-compiled" noise)
@@ -33,6 +34,7 @@ emacs --batch --no-site-file -L . --eval '
       (load "unison-ts-indent-rules.el")
       (load "unison-ts-setup.el")
       (load "unison-ts-install.el")
+      (load "unison-ts-repl.el")
       (load "unison-ts-mode.el")
       (message "✅ All files loaded successfully"))
   (error
