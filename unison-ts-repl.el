@@ -161,6 +161,50 @@ If PROMPT-ARG is non-nil, prompt for an argument to append."
       (set-process-sentinel (get-buffer-process (current-buffer))
                             #'unison-ts-output--sentinel))))
 
+;;;###autoload
+(defun unison-ts-add ()
+  "Add definitions from the current file to the codebase."
+  (interactive)
+  (when buffer-file-name
+    (unison-ts--run-command (format "add %s" (file-relative-name buffer-file-name
+                                                                  (unison-ts-project-root))))))
+
+;;;###autoload
+(defun unison-ts-update ()
+  "Update existing definitions in the codebase."
+  (interactive)
+  (unison-ts--run-command "update"))
+
+;;;###autoload
+(defun unison-ts-test ()
+  "Run tests matching a pattern."
+  (interactive)
+  (unison-ts--run-command "test" "Test pattern (empty for all)"))
+
+;;;###autoload
+(defun unison-ts-run ()
+  "Run a term from the codebase."
+  (interactive)
+  (unison-ts--run-command "run" "Term to run"))
+
+;;;###autoload
+(defun unison-ts-watch ()
+  "Watch the current file for changes."
+  (interactive)
+  (when buffer-file-name
+    (let* ((default-directory (unison-ts-project-root))
+           (rel-path (file-relative-name buffer-file-name default-directory)))
+      (unison-ts--run-command (format "watch %s" rel-path)))))
+
+;;;###autoload
+(defun unison-ts-load ()
+  "Load the current scratch file."
+  (interactive)
+  (when buffer-file-name
+    (let* ((default-directory (unison-ts-project-root))
+           (rel-path (file-relative-name buffer-file-name default-directory)))
+      (unison-ts--run-command (format "load %s" rel-path)))))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
