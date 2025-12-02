@@ -137,68 +137,60 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
                             (delete-windows-on buf)
                             (kill-buffer buf))))))))
 
-(defun unison-ts--run-command (command &optional prompt-arg)
-  "Run UCM COMMAND in a compilation buffer.
-If PROMPT-ARG is non-nil, prompt for an argument to append."
-  (unison-ts--ensure-ucm)
-  (let* ((arg (when prompt-arg
-                (read-string (format "%s: " prompt-arg))))
-         (full-command (if arg
-                           (format "%s %s" command arg)
-                         command))
-         (default-directory (unison-ts-project-root))
-         (compile-command (format "%s --noinput -c '%s'"
-                                  unison-ts-ucm-executable
-                                  full-command)))
-    (compilation-start compile-command 'unison-ts-output-mode
-                       (lambda (_) "*unison-output*"))
-    (with-current-buffer "*unison-output*"
-      (set-process-sentinel (get-buffer-process (current-buffer))
-                            #'unison-ts-output--sentinel))))
+(defun unison-ts--send-to-repl (command)
+  "Send COMMAND to the UCM REPL, starting it if needed."
+  (let ((buf (or (unison-ts-repl--get-buffer)
+                 (unison-ts-repl--start))))
+    (with-current-buffer buf
+      (goto-char (point-max))
+      (comint-send-string (get-buffer-process buf) (concat command "\n")))
+    (display-buffer buf)))
 
 ;;;###autoload
 (defun unison-ts-add ()
   "Add definitions from the current file to the codebase."
   (interactive)
-  (when buffer-file-name
-    (unison-ts--run-command (format "add %s" (file-relative-name buffer-file-name
-                                                                  (unison-ts-project-root))))))
+  (unison-ts--send-to-repl "add"))
 
 ;;;###autoload
 (defun unison-ts-update ()
   "Update existing definitions in the codebase."
   (interactive)
-  (unison-ts--run-command "update"))
+  (unison-ts--send-to-repl "update"))
 
 ;;;###autoload
 (defun unison-ts-test ()
   "Run tests matching a pattern."
   (interactive)
-  (unison-ts--run-command "test" "Test pattern (empty for all)"))
+  (let ((pattern (read-string "Test pattern (empty for all): ")))
+    (unison-ts--send-to-repl (if (string-empty-p pattern)
+                                  "test"
+                                (format "test %s" pattern)))))
 
 ;;;###autoload
 (defun unison-ts-run ()
   "Run a term from the codebase."
   (interactive)
-  (unison-ts--run-command "run" "Term to run"))
+  (let ((term (read-string "Term to run: ")))
+    (unison-ts--send-to-repl (format "run %s" term))))
 
 ;;;###autoload
 (defun unison-ts-watch ()
   "Watch the current file for changes."
   (interactive)
   (when buffer-file-name
-    (let* ((default-directory (unison-ts-project-root))
-           (rel-path (file-relative-name buffer-file-name default-directory)))
-      (unison-ts--run-command (format "watch %s" rel-path)))))
+    (unison-ts--send-to-repl (format "load %s" (file-relative-name
+                                                 buffer-file-name
+                                                 (unison-ts-project-root))))))
 
 ;;;###autoload
 (defun unison-ts-load ()
   "Load the current scratch file."
   (interactive)
   (when buffer-file-name
-    (let* ((default-directory (unison-ts-project-root))
-           (rel-path (file-relative-name buffer-file-name default-directory)))
-      (unison-ts--run-command (format "load %s" rel-path)))))
+    (unison-ts--send-to-repl (format "load %s" (file-relative-name
+                                                 buffer-file-name
+                                                 (unison-ts-project-root))))))
 
 (provide 'unison-ts-repl)
 
