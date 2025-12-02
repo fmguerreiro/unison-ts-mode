@@ -27,6 +27,7 @@
 (require 'compile)
 (require 'project)
 (require 'treesit)
+(require 'seq)
 
 (defgroup unison-ts-repl nil
   "UCM integration for Unison."
@@ -66,6 +67,37 @@ Signals an error if UCM is not found."
 (defvar unison-ts-repl--buffers (make-hash-table :test 'equal :weakness 'value)
   "Hash table mapping project roots to their UCM REPL buffers.")
 
+(defun unison-ts--external-ucm-pids ()
+  "Return list of external UCM process PIDs (not managed by Emacs)."
+  (let ((emacs-ucm-pids (delq nil
+                              (mapcar (lambda (buf)
+                                        (when-let ((proc (get-buffer-process buf)))
+                                          (process-id proc)))
+                                      (hash-table-values unison-ts-repl--buffers))))
+        (all-pids nil))
+    (with-temp-buffer
+      (when (zerop (call-process "pgrep" nil t nil "-x" "ucm"))
+        (setq all-pids (mapcar #'string-to-number
+                               (split-string (buffer-string) "\n" t)))))
+    (seq-difference all-pids emacs-ucm-pids)))
+
+(defun unison-ts--find-ucm-buffer ()
+  "Find any buffer running UCM (term, vterm, eshell, shell).
+Returns the buffer or nil."
+  (seq-find (lambda (buf)
+              (with-current-buffer buf
+                (and (process-live-p (get-buffer-process buf))
+                     (string-match-p "ucm" (buffer-name buf)))))
+            (buffer-list)))
+
+(defun unison-ts--kill-external-ucm ()
+  "Kill external UCM processes after confirmation."
+  (let ((pids (unison-ts--external-ucm-pids)))
+    (when pids
+      (dolist (pid pids)
+        (signal-process pid 'TERM))
+      (sit-for 0.5))))
+
 (defvar unison-ts-repl-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c M-o") #'comint-clear-buffer)
@@ -93,8 +125,28 @@ Returns nil if UCM process is not running."
       buf)))
 
 (defun unison-ts-repl--start ()
-  "Start UCM REPL for the current project."
+  "Start UCM REPL for the current project.
+Checks for existing UCM processes and handles conflicts."
   (unison-ts--ensure-ucm)
+  (let ((existing-buf (unison-ts--find-ucm-buffer))
+        (external-pids (unison-ts--external-ucm-pids)))
+    (cond
+     (existing-buf
+      (when (yes-or-no-p (format "UCM already running in buffer %s. Switch to it? "
+                                 (buffer-name existing-buf)))
+        existing-buf))
+     (external-pids
+      (if (yes-or-no-p (format "UCM already running externally (PID: %s). Kill and start in Emacs? "
+                               (mapconcat #'number-to-string external-pids ", ")))
+          (progn
+            (unison-ts--kill-external-ucm)
+            (unison-ts-repl--do-start))
+        (user-error "Cannot start UCM while another instance is running")))
+     (t
+      (unison-ts-repl--do-start)))))
+
+(defun unison-ts-repl--do-start ()
+  "Actually start the UCM REPL process."
   (let* ((root (unison-ts-project-root))
          (default-directory root)
          (buf-name (unison-ts-repl--buffer-name))
