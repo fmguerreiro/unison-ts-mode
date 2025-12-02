@@ -27,6 +27,23 @@
 (require 'compile)
 (require 'project)
 
+(defgroup unison-ts-repl nil
+  "UCM integration for Unison."
+  :group 'unison-ts
+  :prefix "unison-ts-")
+
+(defcustom unison-ts-ucm-executable "ucm"
+  "Path to the UCM executable."
+  :type 'string
+  :group 'unison-ts-repl)
+
+(defcustom unison-ts-output-auto-close 2
+  "Seconds to wait before closing output buffer on success.
+Set to nil to disable auto-close."
+  :type '(choice (integer :tag "Seconds")
+                 (const :tag "Disable" nil))
+  :group 'unison-ts-repl)
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
