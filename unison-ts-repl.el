@@ -62,6 +62,55 @@ Signals an error if UCM is not found."
   (unless (executable-find unison-ts-ucm-executable)
     (user-error "UCM not found. Install from https://unison-lang.org")))
 
+(defvar unison-ts-repl--buffers (make-hash-table :test 'equal)
+  "Hash table mapping project roots to their UCM REPL buffers.")
+
+(defvar unison-ts-repl-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c M-o") #'comint-clear-buffer)
+    map)
+  "Keymap for `unison-ts-repl-mode'.")
+
+(define-derived-mode unison-ts-repl-mode comint-mode "UCM"
+  "Major mode for interacting with UCM."
+  :group 'unison-ts-repl
+  (setq-local comint-prompt-regexp "^[^>\n]*> ")
+  (setq-local comint-prompt-read-only t)
+  (setq-local comint-process-echoes nil))
+
+(defun unison-ts-repl--buffer-name ()
+  "Return the REPL buffer name for the current project."
+  (format "*ucm: %s*" (unison-ts-project-name)))
+
+(defun unison-ts-repl--get-buffer ()
+  "Get or create the UCM REPL buffer for the current project.
+Returns nil if UCM process is not running."
+  (let* ((root (unison-ts-project-root))
+         (buf (gethash root unison-ts-repl--buffers)))
+    (when (and buf (buffer-live-p buf)
+               (get-buffer-process buf))
+      buf)))
+
+(defun unison-ts-repl--start ()
+  "Start UCM REPL for the current project."
+  (unison-ts--ensure-ucm)
+  (let* ((root (unison-ts-project-root))
+         (default-directory root)
+         (buf-name (unison-ts-repl--buffer-name))
+         (buf (make-comint-in-buffer "ucm" buf-name unison-ts-ucm-executable nil)))
+    (with-current-buffer buf
+      (unison-ts-repl-mode))
+    (puthash root buf unison-ts-repl--buffers)
+    buf))
+
+;;;###autoload
+(defun unison-ts-repl ()
+  "Switch to UCM REPL buffer, starting UCM if needed."
+  (interactive)
+  (let ((buf (or (unison-ts-repl--get-buffer)
+                 (unison-ts-repl--start))))
+    (pop-to-buffer buf)))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
