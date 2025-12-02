@@ -16,6 +16,7 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 - Automatic indentation for all Unison constructs
 - imenu support for navigation (functions, types, abilities)
 - LSP integration (eglot and lsp-mode)
+- UCM REPL integration with keybindings
 - Auto-install of tree-sitter grammar
 
 ## Screenshots
@@ -136,6 +137,20 @@ export UNISON_LSP_PORT=5758
 ```bash
 ucm headless
 ```
+
+### UCM Integration
+
+Interact with UCM directly from Emacs. Open the REPL with `C-c C-u r` or use these commands:
+
+| Keybinding | Command | Description |
+|------------|---------|-------------|
+| `C-c C-u r` | `unison-ts-repl` | Open UCM REPL |
+| `C-c C-u a` | `unison-ts-add` | Add definitions from current file |
+| `C-c C-u u` | `unison-ts-update` | Update existing definitions |
+| `C-c C-u t` | `unison-ts-test` | Run tests (prompts for pattern) |
+| `C-c C-u x` | `unison-ts-run` | Run a term |
+| `C-c C-u w` | `unison-ts-watch` | Watch current file for changes |
+| `C-c C-u l` | `unison-ts-load` | Load current file |
 
 ## Troubleshooting
 

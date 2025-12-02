@@ -43,16 +43,16 @@
 ;; For LSP support, install UCM (Unison Codebase Manager) and enable
 ;; eglot or lsp-mode.
 ;;
-;; UCM Keybindings (under C-c u prefix):
-;;   C-c u r - Open UCM REPL
-;;   C-c u a - Add definitions from current file
-;;   C-c u u - Update definitions
-;;   C-c u t - Run tests
-;;   C-c u x - Run a term
-;;   C-c u w - Watch current file
-;;   C-c u l - Load current file
-;;   C-c u e - Send region to REPL
-;;   C-c u d - Send definition at point to REPL
+;; UCM Keybindings (under C-c C-u prefix):
+;;   C-c C-u r - Open UCM REPL
+;;   C-c C-u a - Add definitions from current file
+;;   C-c C-u u - Update definitions
+;;   C-c C-u t - Run tests
+;;   C-c C-u x - Run a term
+;;   C-c C-u w - Watch current file
+;;   C-c C-u l - Load current file
+;;   C-c C-u e - Send region to REPL
+;;   C-c C-u d - Send definition at point to REPL
 ;;
 ;; Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
 
@@ -92,15 +92,15 @@ See `treesit-simple-imenu-settings' for details.")
 
 (defvar unison-ts-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c u r") #'unison-ts-repl)
-    (define-key map (kbd "C-c u a") #'unison-ts-add)
-    (define-key map (kbd "C-c u u") #'unison-ts-update)
-    (define-key map (kbd "C-c u t") #'unison-ts-test)
-    (define-key map (kbd "C-c u x") #'unison-ts-run)
-    (define-key map (kbd "C-c u w") #'unison-ts-watch)
-    (define-key map (kbd "C-c u l") #'unison-ts-load)
-    (define-key map (kbd "C-c u e") #'unison-ts-send-region)
-    (define-key map (kbd "C-c u d") #'unison-ts-send-definition)
+    (define-key map (kbd "C-c C-u r") #'unison-ts-repl)
+    (define-key map (kbd "C-c C-u a") #'unison-ts-add)
+    (define-key map (kbd "C-c C-u u") #'unison-ts-update)
+    (define-key map (kbd "C-c C-u t") #'unison-ts-test)
+    (define-key map (kbd "C-c C-u x") #'unison-ts-run)
+    (define-key map (kbd "C-c C-u w") #'unison-ts-watch)
+    (define-key map (kbd "C-c C-u l") #'unison-ts-load)
+    (define-key map (kbd "C-c C-u e") #'unison-ts-send-region)
+    (define-key map (kbd "C-c C-u d") #'unison-ts-send-definition)
     map)
   "Keymap for `unison-ts-mode'.")
 

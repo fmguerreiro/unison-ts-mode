@@ -62,7 +62,7 @@ Falls back to `project-root' or `default-directory'."
   "Ensure UCM executable is available.
 Signals an error if UCM is not found."
   (unless (executable-find unison-ts-ucm-executable)
-    (user-error "UCM not found. Install from https://unison-lang.org")))
+    (user-error "UCM not found.  Install from https://unison-lang.org")))
 
 (defvar unison-ts-repl--buffers (make-hash-table :test 'equal :weakness 'value)
   "Hash table mapping project roots to their UCM REPL buffers.")
@@ -136,7 +136,7 @@ Checks for existing UCM processes and handles conflicts."
                                  (buffer-name existing-buf)))
         existing-buf))
      (external-pids
-      (if (yes-or-no-p (format "UCM already running externally (PID: %s). Kill and start in Emacs? "
+      (if (yes-or-no-p (format "UCM already running externally (PID: %s).  Kill and start in Emacs? "
                                (mapconcat #'number-to-string external-pids ", ")))
           (progn
             (unison-ts--kill-external-ucm)
@@ -178,7 +178,8 @@ Checks for existing UCM processes and handles conflicts."
 
 (defun unison-ts-output--sentinel (proc _event)
   "Process sentinel for UCM output.
-Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
+PROC is the process.  Auto-close buffer on success after
+`unison-ts-output-auto-close' seconds."
   (when (and (eq (process-status proc) 'exit)
              (zerop (process-exit-status proc))
              unison-ts-output-auto-close)
@@ -213,7 +214,7 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
 
 ;;;###autoload
 (defun unison-ts-test ()
-  "Run tests matching a pattern."
+  "Run test matching a pattern."
   (interactive)
   (let ((pattern (read-string "Test pattern (empty for all): ")))
     (unison-ts--send-to-repl (if (string-empty-p pattern)
@@ -229,7 +230,7 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
 
 ;;;###autoload
 (defun unison-ts-watch ()
-  "Watch the current file for changes."
+  "Watch current file and reload on change."
   (interactive)
   (when buffer-file-name
     (unison-ts--send-to-repl (format "load %s" (file-relative-name

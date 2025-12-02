@@ -1297,9 +1297,9 @@
   "Mode keymap should have UCM bindings."
   (require 'unison-ts-mode)
   (should (keymapp unison-ts-mode-map))
-  (should (lookup-key unison-ts-mode-map (kbd "C-c u r")))
-  (should (lookup-key unison-ts-mode-map (kbd "C-c u a")))
-  (should (lookup-key unison-ts-mode-map (kbd "C-c u t"))))
+  (should (lookup-key unison-ts-mode-map (kbd "C-c C-u r")))
+  (should (lookup-key unison-ts-mode-map (kbd "C-c C-u a")))
+  (should (lookup-key unison-ts-mode-map (kbd "C-c C-u t"))))
 
 (ert-deftest unison-ts-repl/commands-defined ()
   "UCM command functions should be defined."
