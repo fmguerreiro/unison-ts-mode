@@ -1,0 +1,59 @@
+#!/bin/bash
+# MELPA-style checks for unison-ts-mode
+
+set -e
+
+echo "Running pre-commit checks..."
+
+# Byte-compile all .el files
+echo "→ Byte-compiling..."
+emacs --batch --no-site-file -L . \
+  -f batch-byte-compile \
+  unison-ts-mode.el \
+  unison-ts-font-lock.el \
+  unison-ts-indent-rules.el \
+  unison-ts-setup.el \
+  unison-ts-syntax-table.el \
+  unison-ts-install.el \
+  2>&1 | tee /tmp/byte-compile.log
+
+# Check for warnings (excluding "newer than byte-compiled" noise)
+if grep -E "Warning:|Error:" /tmp/byte-compile.log | grep -v "newer than byte-compiled"; then
+  echo "❌ Byte-compile warnings found"
+  exit 1
+fi
+
+# Load-check all files
+echo "→ Load-checking..."
+emacs --batch --no-site-file -L . --eval '
+(condition-case err
+    (progn
+      (load "unison-ts-syntax-table.el")
+      (load "unison-ts-font-lock.el")
+      (load "unison-ts-indent-rules.el")
+      (load "unison-ts-setup.el")
+      (load "unison-ts-install.el")
+      (load "unison-ts-mode.el")
+      (message "✅ All files loaded successfully"))
+  (error
+   (message "❌ Load error: %s" err)
+   (kill-emacs 1)))' 2>&1
+
+# Check for top-level setq/setq-default (melpazoid check)
+echo "→ Checking for top-level setq..."
+if grep -l "^(setq\|^(setq-default" *.el 2>/dev/null; then
+  echo "❌ Found top-level setq/setq-default"
+  exit 1
+fi
+
+# Check for with-eval-after-load in package code (not in strings/docstrings)
+echo "→ Checking for with-eval-after-load..."
+if grep "^(with-eval-after-load" *.el 2>/dev/null; then
+  echo "❌ Found top-level with-eval-after-load"
+  exit 1
+fi
+
+# Clean up .elc files
+rm -f *.elc
+
+echo "✅ All checks passed"

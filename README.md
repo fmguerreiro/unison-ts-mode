@@ -203,6 +203,14 @@ cp "libtree-sitter-unison.${soext}" ~/.emacs.d/tree-sitter/
 
 Use `M-x treesit-explore-mode` to inspect the syntax tree while developing or debugging.
 
+## Development
+
+Set up the pre-commit hook to run MELPA-style checks:
+
+```sh
+ln -s ../../scripts/pre-commit .git/hooks/pre-commit
+```
+
 ## Contributing
 
 Contributions welcome via GitHub pull requests.
