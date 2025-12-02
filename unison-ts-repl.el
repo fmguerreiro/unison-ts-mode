@@ -44,6 +44,18 @@ Set to nil to disable auto-close."
                  (const :tag "Disable" nil))
   :group 'unison-ts-repl)
 
+(defun unison-ts-project-root ()
+  "Find Unison project root by looking for .unison directory.
+Falls back to `project-root' or `default-directory'."
+  (or (locate-dominating-file default-directory ".unison")
+      (when-let ((proj (project-current)))
+        (project-root proj))
+      default-directory))
+
+(defun unison-ts-project-name ()
+  "Return the name of the current Unison project."
+  (file-name-nondirectory (directory-file-name (unison-ts-project-root))))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
