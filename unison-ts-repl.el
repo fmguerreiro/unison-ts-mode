@@ -142,6 +142,25 @@ Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
                                 (delete-windows-on buf)
                                 (kill-buffer buf))))))))
 
+(defun unison-ts--run-command (command &optional prompt-arg)
+  "Run UCM COMMAND in a compilation buffer.
+If PROMPT-ARG is non-nil, prompt for an argument to append."
+  (unison-ts--ensure-ucm)
+  (let* ((arg (when prompt-arg
+                (read-string (format "%s: " prompt-arg))))
+         (full-command (if arg
+                           (format "%s %s" command arg)
+                         command))
+         (default-directory (unison-ts-project-root))
+         (compile-command (format "%s --noinput -c '%s'"
+                                  unison-ts-ucm-executable
+                                  full-command)))
+    (compilation-start compile-command 'unison-ts-output-mode
+                       (lambda (_) "*unison-output*"))
+    (with-current-buffer "*unison-output*"
+      (set-process-sentinel (get-buffer-process (current-buffer))
+                            #'unison-ts-output--sentinel))))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
