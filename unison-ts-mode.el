@@ -90,6 +90,20 @@ See `treesit-simple-imenu-settings' for details.")
     map)
   "Keymap for `unison-ts-mode'.")
 
+(easy-menu-define unison-ts-mode-menu unison-ts-mode-map
+  "Menu for Unison mode."
+  '("Unison"
+    ["Open UCM REPL" unison-ts-repl]
+    "---"
+    ("UCM Commands"
+     ["Add" unison-ts-add :active buffer-file-name]
+     ["Update" unison-ts-update]
+     ["Load" unison-ts-load :active buffer-file-name]
+     ["Watch" unison-ts-watch :active buffer-file-name]
+     "---"
+     ["Test..." unison-ts-test]
+     ["Run..." unison-ts-run])))
+
 ;;;###autoload
 (define-derived-mode unison-ts-mode prog-mode "Unison"
   "Major mode for editing Unison, powered by tree-sitter."

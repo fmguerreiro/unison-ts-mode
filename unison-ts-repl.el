@@ -205,6 +205,19 @@ If PROMPT-ARG is non-nil, prompt for an argument to append."
            (rel-path (file-relative-name buffer-file-name default-directory)))
       (unison-ts--run-command (format "load %s" rel-path)))))
 
+(easy-menu-define unison-ts-ucm-menu nil
+  "Menu for UCM commands."
+  '("UCM"
+    ["Open REPL" unison-ts-repl]
+    "---"
+    ["Add" unison-ts-add :active buffer-file-name]
+    ["Update" unison-ts-update]
+    ["Load" unison-ts-load :active buffer-file-name]
+    ["Watch" unison-ts-watch :active buffer-file-name]
+    "---"
+    ["Test..." unison-ts-test]
+    ["Run..." unison-ts-run]))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
