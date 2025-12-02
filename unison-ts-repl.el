@@ -62,7 +62,7 @@ Signals an error if UCM is not found."
   (unless (executable-find unison-ts-ucm-executable)
     (user-error "UCM not found. Install from https://unison-lang.org")))
 
-(defvar unison-ts-repl--buffers (make-hash-table :test 'equal)
+(defvar unison-ts-repl--buffers (make-hash-table :test 'equal :weakness 'value)
   "Hash table mapping project roots to their UCM REPL buffers.")
 
 (defvar unison-ts-repl-mode-map
@@ -123,24 +123,19 @@ Returns nil if UCM process is not running."
               '(("^\\s-*\\([0-9]+\\) \\|" nil 1)))
   (setq-local compilation-disable-input t))
 
-(defvar unison-ts-output--timer nil
-  "Timer for auto-closing output buffer.")
-
 (defun unison-ts-output--sentinel (proc _event)
   "Process sentinel for UCM output.
 Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
   (when (and (eq (process-status proc) 'exit)
              (zerop (process-exit-status proc))
              unison-ts-output-auto-close)
-    (when unison-ts-output--timer
-      (cancel-timer unison-ts-output--timer))
-    (setq unison-ts-output--timer
-          (run-with-timer unison-ts-output-auto-close nil
-                          (lambda ()
-                            (when-let ((buf (process-buffer proc)))
-                              (when (buffer-live-p buf)
-                                (delete-windows-on buf)
-                                (kill-buffer buf))))))))
+    (let ((buf (process-buffer proc)))
+      (when (buffer-live-p buf)
+        (run-with-timer unison-ts-output-auto-close nil
+                        (lambda ()
+                          (when (buffer-live-p buf)
+                            (delete-windows-on buf)
+                            (kill-buffer buf))))))))
 
 (defun unison-ts--run-command (command &optional prompt-arg)
   "Run UCM COMMAND in a compilation buffer.
