@@ -111,6 +111,37 @@ Returns nil if UCM process is not running."
                  (unison-ts-repl--start))))
     (pop-to-buffer buf)))
 
+(defvar unison-ts-output-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map compilation-mode-map)
+    map)
+  "Keymap for `unison-ts-output-mode'.")
+
+(define-compilation-mode unison-ts-output-mode "UCM-Output"
+  "Major mode for UCM command output."
+  (setq-local compilation-error-regexp-alist
+              '(("^\\s-*\\([0-9]+\\) \\|" nil 1)))
+  (setq-local compilation-disable-input t))
+
+(defvar unison-ts-output--timer nil
+  "Timer for auto-closing output buffer.")
+
+(defun unison-ts-output--sentinel (proc _event)
+  "Process sentinel for UCM output.
+Auto-closes buffer on success after `unison-ts-output-auto-close' seconds."
+  (when (and (eq (process-status proc) 'exit)
+             (zerop (process-exit-status proc))
+             unison-ts-output-auto-close)
+    (when unison-ts-output--timer
+      (cancel-timer unison-ts-output--timer))
+    (setq unison-ts-output--timer
+          (run-with-timer unison-ts-output-auto-close nil
+                          (lambda ()
+                            (when-let ((buf (process-buffer proc)))
+                              (when (buffer-live-p buf)
+                                (delete-windows-on buf)
+                                (kill-buffer buf))))))))
+
 (provide 'unison-ts-repl)
 
 ;; Local Variables:
