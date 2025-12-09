@@ -58,10 +58,43 @@
 
 ;;; Code:
 
-(require 'unison-ts-syntax-table)
-(require 'unison-ts-setup)
+(require 'treesit)
+(require 'unison-ts-font-lock)
+(require 'unison-ts-indent-rules)
 (require 'unison-ts-install)
 (require 'unison-ts-repl)
+
+;;; Syntax Table
+
+(defconst unison-ts-syntax-table
+  (let ((table (make-syntax-table)))
+    (modify-syntax-entry ?- ". 12" table)
+    (modify-syntax-entry ?\n ">" table)
+    (modify-syntax-entry ?\[ ". 1" table)
+    (modify-syntax-entry ?: ". 23b" table)
+    (modify-syntax-entry ?\] ". 4" table)
+    table)
+  "Syntax table for `unison-ts-mode'.")
+
+;;; Setup
+
+(defun unison-ts-setup ()
+  "Setup treesit for `unison-ts-mode'."
+  (setq-local treesit-font-lock-settings
+              (apply #'treesit-font-lock-rules
+                     unison-ts-font-lock))
+
+  (setq-local font-lock-defaults nil)
+  (setq-local treesit-font-lock-feature-list
+              '((comment doc string declaration preprocessor error import)
+                (keyword type constant)
+                (function-call variable)
+                (bracket operator delimiter)))
+  (setq-local treesit-font-lock-level 4)
+
+  (setq-local treesit-simple-indent-rules unison-ts-indent-rules)
+
+  (treesit-major-mode-setup))
 
 ;;; Imenu
 

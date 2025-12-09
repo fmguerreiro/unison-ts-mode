@@ -10,11 +10,9 @@ Emacs major mode for the Unison programming language using tree-sitter for synta
 
 The mode is split into focused modules:
 
-- `unison-ts-mode.el` - Entry point, defines `unison-ts-mode` derived from `prog-mode`, LSP integration (eglot/lsp-mode), imenu settings, keybindings
-- `unison-ts-setup.el` - Configures treesit settings (font-lock, indentation)
+- `unison-ts-mode.el` - Entry point, defines `unison-ts-mode` derived from `prog-mode`, syntax table, treesit setup, LSP integration (eglot/lsp-mode), imenu settings, keybindings
 - `unison-ts-font-lock.el` - Tree-sitter font-lock rules using `treesit-font-lock-rules`
 - `unison-ts-indent-rules.el` - Tree-sitter indentation rules
-- `unison-ts-syntax-table.el` - Emacs syntax table
 - `unison-ts-install.el` - Grammar auto-installation
 - `unison-ts-repl.el` - UCM (Unison Codebase Manager) REPL integration via comint
 
@@ -28,7 +26,7 @@ emacs --batch -L . -l ert -l unison-ts-mode-tests.el -f ert-run-tests-batch-and-
 emacs --batch -L . -l ert -l unison-ts-mode-tests.el --eval '(ert-run-tests-batch-and-exit "unison-ts-font-lock/keyword-if")'
 
 # Byte-compile all files
-emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.el unison-ts-indent-rules.el unison-ts-setup.el unison-ts-syntax-table.el unison-ts-install.el unison-ts-repl.el
+emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.el unison-ts-indent-rules.el unison-ts-install.el unison-ts-repl.el
 
 # Run pre-commit checks (MELPA-style)
 ./scripts/pre-commit
