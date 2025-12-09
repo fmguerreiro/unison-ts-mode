@@ -32,15 +32,15 @@
   '((use) (structural) (unique) (kw_if) (kw_then) (kw_else)
     (ability) (cases) (where) (do) (handle)
     (kw_let) (match) (with) (kw_typelink) (kw_termlink)
-    (kw_forall) (type_kw)))
+    (kw_forall) (type_kw) (otherwise)))
 
 (defvar unison-ts-font-lock--constants
   '((nat) (int) (float) (literal_boolean) (literal_byte)
-    (literal_hex) (hash_qualifier)))
+    (literal_hex) (hash_qualifier) (built_in_hash)))
 
 (defvar unison-ts-font-lock-operators
   '((or) (and) (pipe) (operator) (kw_equals)
-    (type_signature_colon) (arrow_symbol)))
+    (type_signature_colon) (arrow_symbol) (cons) (snoc)))
 
 ;; possible faces
 ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Faces-for-Font-Lock.html
@@ -70,11 +70,11 @@
           (type_declaration (kw_equals) :anchor (regular_identifier) @font-lock-type-face)
           (type_declaration (pipe) :anchor (regular_identifier) @font-lock-type-face)
           ;; Ability operation names
-          (ability_declaration (constructor name: (regular_identifier) @font-lock-function-name-face))
+          (ability_declaration (constructor (constructor_name) @font-lock-function-name-face))
           ;; Record field names
           (record_field (field_name) @font-lock-property-name-face)
           ;; declarations with no args are highlighted as variable declarations
-          (term_definition name: (regular_identifier) @font-lock-variable-name-face (kw_equals))
+          (term_definition name: (regular_identifier) @font-lock-variable-name-face :anchor (kw_equals))
           ;; by default, declarations are highlighted as function declarations
           (term_definition name: (regular_identifier) @font-lock-function-name-face)
           (type_signature term_name: (regular_identifier) @font-lock-function-name-face)])
