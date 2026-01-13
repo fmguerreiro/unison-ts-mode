@@ -1366,5 +1366,37 @@
   (should (fboundp 'unison-ts-repl--start))
   (should (fboundp 'unison-ts-api--lsp-running-p)))
 
+;;; MCP client tests
+
+(ert-deftest unison-ts-mcp/client-functions-defined ()
+  "MCP client functions should be defined."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-mcp--start))
+  (should (fboundp 'unison-ts-mcp--send))
+  (should (fboundp 'unison-ts-mcp--call-tool)))
+
+(ert-deftest unison-ts-mcp/jsonrpc-format ()
+  "MCP messages should be valid JSON-RPC 2.0."
+  (require 'unison-ts-repl)
+  (let ((msg (unison-ts-mcp--make-request "test/method" '((foo . "bar")))))
+    (should (equal (alist-get 'jsonrpc msg) "2.0"))
+    (should (equal (alist-get 'method msg) "test/method"))
+    (should (alist-get 'id msg))))
+
+(ert-deftest unison-ts-mcp/tool-update-definitions ()
+  "update-definitions tool call should be properly formatted."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-mcp--update-definitions)))
+
+(ert-deftest unison-ts-mcp/tool-run-tests ()
+  "run-tests tool call should be properly formatted."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-mcp--run-tests)))
+
+(ert-deftest unison-ts-mcp/tool-run ()
+  "run tool call should be properly formatted."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-mcp--run)))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

@@ -48,7 +48,121 @@ Set to nil to disable auto-close."
                  (const :tag "Disable" nil))
   :group 'unison-ts-repl)
 
-;;; UCM API Integration
+;;; UCM MCP Client
+;;
+;; UCM provides an MCP (Model Context Protocol) server that allows sending
+;; commands without codebase lock conflicts. This is the preferred method
+;; when LSP is running.
+
+(defvar unison-ts-mcp--process nil
+  "The UCM MCP subprocess.")
+
+(defvar unison-ts-mcp--request-id 0
+  "Counter for JSON-RPC request IDs.")
+
+(defvar unison-ts-mcp--pending-requests (make-hash-table :test 'equal)
+  "Hash table of pending request callbacks keyed by ID.")
+
+(defvar unison-ts-mcp--response-buffer ""
+  "Buffer for accumulating MCP responses.")
+
+(defun unison-ts-mcp--make-request (method params)
+  "Create a JSON-RPC 2.0 request for METHOD with PARAMS."
+  (setq unison-ts-mcp--request-id (1+ unison-ts-mcp--request-id))
+  `((jsonrpc . "2.0")
+    (method . ,method)
+    (params . ,params)
+    (id . ,unison-ts-mcp--request-id)))
+
+(defun unison-ts-mcp--filter (_proc output)
+  "Process filter for MCP subprocess receiving OUTPUT."
+  (setq unison-ts-mcp--response-buffer
+        (concat unison-ts-mcp--response-buffer output))
+  ;; Try to parse complete JSON objects (newline-delimited)
+  (while (string-match "\\`\\([^\n]+\\)\n" unison-ts-mcp--response-buffer)
+    (let* ((line (match-string 1 unison-ts-mcp--response-buffer))
+           (response (ignore-errors (json-read-from-string line))))
+      (setq unison-ts-mcp--response-buffer
+            (substring unison-ts-mcp--response-buffer (match-end 0)))
+      (when response
+        (let* ((id (alist-get 'id response))
+               (callback (gethash id unison-ts-mcp--pending-requests)))
+          (when callback
+            (remhash id unison-ts-mcp--pending-requests)
+            (funcall callback response)))))))
+
+(defun unison-ts-mcp--start ()
+  "Start the UCM MCP subprocess if not already running."
+  (unless (and unison-ts-mcp--process
+               (process-live-p unison-ts-mcp--process))
+    (setq unison-ts-mcp--response-buffer "")
+    (let ((default-directory (unison-ts-project-root)))
+      (setq unison-ts-mcp--process
+            (make-process
+             :name "ucm-mcp"
+             :command (list unison-ts-ucm-executable "mcp")
+             :buffer nil
+             :filter #'unison-ts-mcp--filter
+             :sentinel (lambda (_proc _event)
+                         (setq unison-ts-mcp--process nil)))))
+    ;; Initialize the MCP connection
+    (unison-ts-mcp--send-sync
+     "initialize"
+     `((protocolVersion . "2024-11-05")
+       (capabilities . ())
+       (clientInfo . ((name . "unison-ts-mode")
+                      (version . "0.1.0"))))))
+  unison-ts-mcp--process)
+
+(defun unison-ts-mcp--send (method params callback)
+  "Send METHOD with PARAMS to MCP, calling CALLBACK with response."
+  (unison-ts-mcp--start)
+  (let* ((request (unison-ts-mcp--make-request method params))
+         (json-str (concat (json-encode request) "\n")))
+    (puthash (alist-get 'id request) callback unison-ts-mcp--pending-requests)
+    (process-send-string unison-ts-mcp--process json-str)))
+
+(defun unison-ts-mcp--send-sync (method params)
+  "Send METHOD with PARAMS to MCP and wait for response."
+  (let ((response nil)
+        (done nil))
+    (unison-ts-mcp--send method params
+                         (lambda (resp)
+                           (setq response resp)
+                           (setq done t)))
+    (while (not done)
+      (accept-process-output unison-ts-mcp--process 0.1))
+    response))
+
+(defun unison-ts-mcp--call-tool (tool-name arguments)
+  "Call MCP tool TOOL-NAME with ARGUMENTS synchronously."
+  (let ((response (unison-ts-mcp--send-sync
+                   "tools/call"
+                   `((name . ,tool-name)
+                     (arguments . ,arguments)))))
+    (alist-get 'result response)))
+
+(defun unison-ts-mcp--update-definitions (project-path code)
+  "Update definitions in PROJECT-PATH with CODE via MCP."
+  (unison-ts-mcp--call-tool
+   "update-definitions"
+   `((projectPath . ,project-path)
+     (code . ,code))))
+
+(defun unison-ts-mcp--run-tests (project-path)
+  "Run tests in PROJECT-PATH via MCP."
+  (unison-ts-mcp--call-tool
+   "run-tests"
+   `((projectPath . ,project-path))))
+
+(defun unison-ts-mcp--run (project-path definition)
+  "Run DEFINITION in PROJECT-PATH via MCP."
+  (unison-ts-mcp--call-tool
+   "run"
+   `((projectPath . ,project-path)
+     (definition . ,definition))))
+
+;;; UCM API Integration (Legacy HTTP API)
 ;;
 ;; When UCM runs in headless mode (e.g., for LSP), it exposes an HTTP API.
 ;; These functions allow sending commands via that API instead of spawning
@@ -227,29 +341,19 @@ Returns nil if UCM process is not running."
 
 (defun unison-ts-repl--start ()
   "Start UCM REPL for the current project.
-Checks for existing UCM processes and handles conflicts."
+Note: Most commands now use MCP and don't require the REPL.
+The REPL is for interactive exploration."
   (unison-ts--ensure-ucm)
   (let ((existing-buf (unison-ts--find-ucm-buffer))
-        (external-pids (unison-ts--external-ucm-pids))
         (lsp-running (unison-ts-api--lsp-running-p)))
     (cond
      ;; Already have a REPL buffer - just use it
      (existing-buf existing-buf)
-     ;; LSP/headless conflict - kill it and start REPL
-     ;; This is the common case from GitHub issue #2
-     ((and lsp-running external-pids)
-      (message "Stopping UCM LSP server to start REPL...")
-      (unison-ts--kill-external-ucm)
-      (sit-for 1)
-      (unison-ts-repl--do-start))
-     ;; External UCM running (not LSP) - kill it
-     (external-pids
-      (message "Stopping external UCM to start REPL...")
-      (unison-ts--kill-external-ucm)
-      (unison-ts-repl--do-start))
-     ;; LSP port open but no UCM process found - something else on that port
+     ;; LSP running - inform user that commands use MCP now
      (lsp-running
-      (user-error "Port %d is in use (LSP port). Cannot start UCM REPL" unison-ts-lsp-port))
+      (message "Note: LSP is running. Commands like add/update/test use MCP (no conflict).")
+      (message "Starting REPL for interactive use...")
+      (unison-ts-repl--do-start))
      ;; All clear - start fresh
      (t
       (unison-ts-repl--do-start)))))
@@ -309,68 +413,106 @@ PROC is the process.  Auto-close buffer on success after
       (comint-send-string (get-buffer-process buf) (concat command "\n")))
     (display-buffer buf)))
 
+(defun unison-ts--display-mcp-result (result title)
+  "Display MCP RESULT in a buffer with TITLE."
+  (let ((buf (get-buffer-create (format "*UCM: %s*" title))))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (if (and result (listp result))
+            (let ((content (or (alist-get 'content result)
+                               (alist-get 'text result)
+                               (json-encode result))))
+              (if (listp content)
+                  ;; MCP returns content as array of {type, text} objects
+                  (dolist (item content)
+                    (insert (or (alist-get 'text item) (format "%S" item)) "\n"))
+                (insert (format "%s" content))))
+          (insert (format "%S" result)))
+        (goto-char (point-min))
+        (special-mode)))
+    (display-buffer buf)))
+
 ;;;###autoload
 (defun unison-ts-add ()
-  "Add definitions from the current file to the codebase."
+  "Add definitions from the current file to the codebase.
+Uses MCP when available, falls back to REPL."
   (interactive)
-  (unison-ts--send-to-repl "add"))
+  (if (buffer-file-name)
+      (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
+             (project-path (unison-ts-project-root))
+             (result (unison-ts-mcp--update-definitions project-path code)))
+        (unison-ts--display-mcp-result result "add"))
+    (user-error "Buffer is not visiting a file")))
 
 ;;;###autoload
 (defun unison-ts-update ()
-  "Update existing definitions in the codebase."
+  "Update existing definitions in the codebase.
+Uses MCP when available, falls back to REPL."
   (interactive)
-  (unison-ts--send-to-repl "update"))
+  (if (buffer-file-name)
+      (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
+             (project-path (unison-ts-project-root))
+             (result (unison-ts-mcp--update-definitions project-path code)))
+        (unison-ts--display-mcp-result result "update"))
+    (user-error "Buffer is not visiting a file")))
 
 ;;;###autoload
 (defun unison-ts-test ()
-  "Run test matching a pattern."
+  "Run tests in the current project via MCP."
   (interactive)
-  (let ((pattern (read-string "Test pattern (empty for all): ")))
-    (unison-ts--send-to-repl (if (string-empty-p pattern)
-                                  "test"
-                                (format "test %s" pattern)))))
+  (let* ((project-path (unison-ts-project-root))
+         (result (unison-ts-mcp--run-tests project-path)))
+    (unison-ts--display-mcp-result result "test")))
 
 ;;;###autoload
 (defun unison-ts-run ()
-  "Run a term from the codebase."
+  "Run a term from the codebase via MCP."
   (interactive)
-  (let ((term (read-string "Term to run: ")))
-    (unison-ts--send-to-repl (format "run %s" term))))
+  (let* ((term (read-string "Term to run: "))
+         (project-path (unison-ts-project-root))
+         (result (unison-ts-mcp--run project-path term)))
+    (unison-ts--display-mcp-result result "run")))
 
 ;;;###autoload
 (defun unison-ts-watch ()
-  "Watch current file and reload on change."
+  "Watch current file - typecheck and show results via MCP."
   (interactive)
-  (when buffer-file-name
-    (unison-ts--send-to-repl (format "load %s" (file-relative-name
-                                                 buffer-file-name
-                                                 (unison-ts-project-root))))))
+  (if buffer-file-name
+      (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
+             (project-path (unison-ts-project-root))
+             (result (unison-ts-mcp--call-tool
+                      "typecheck-code"
+                      `((projectPath . ,project-path)
+                        (code . ,code)))))
+        (unison-ts--display-mcp-result result "watch"))
+    (user-error "Buffer is not visiting a file")))
 
 ;;;###autoload
 (defun unison-ts-load ()
-  "Load the current scratch file."
+  "Load current file into the codebase via MCP."
   (interactive)
-  (when buffer-file-name
-    (unison-ts--send-to-repl (format "load %s" (file-relative-name
-                                                 buffer-file-name
-                                                 (unison-ts-project-root))))))
+  (if buffer-file-name
+      (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
+             (project-path (unison-ts-project-root))
+             (result (unison-ts-mcp--update-definitions project-path code)))
+        (unison-ts--display-mcp-result result "load"))
+    (user-error "Buffer is not visiting a file")))
 
-(defun unison-ts--send-code-to-repl (code)
-  "Send CODE to UCM by writing to a temp file and loading it."
-  (let* ((root (unison-ts-project-root))
-         (temp-file (expand-file-name ".scratch.u" root)))
-    (with-temp-file temp-file
-      (insert code))
-    (unison-ts--send-to-repl (format "load %s" (file-relative-name temp-file root)))))
+(defun unison-ts--send-code-via-mcp (code)
+  "Send CODE to UCM via MCP for typechecking/updating."
+  (let* ((project-path (unison-ts-project-root))
+         (result (unison-ts-mcp--update-definitions project-path code)))
+    (unison-ts--display-mcp-result result "eval")))
 
 ;;;###autoload
 (defun unison-ts-send-region (start end)
-  "Send the region between START and END to the UCM REPL."
+  "Send the region between START and END to UCM via MCP."
   (interactive "r")
   (unless (use-region-p)
     (user-error "No region active"))
   (let ((text (buffer-substring-no-properties start end)))
-    (unison-ts--send-code-to-repl text)))
+    (unison-ts--send-code-via-mcp text)))
 
 (defun unison-ts--definition-node-p (node)
   "Return non-nil if NODE is a Unison definition."
@@ -379,7 +521,7 @@ PROC is the process.  Auto-close buffer on success after
 
 ;;;###autoload
 (defun unison-ts-send-definition ()
-  "Send the definition at point to the UCM REPL."
+  "Send the definition at point to UCM via MCP."
   (interactive)
   (let ((node (treesit-node-at (point))))
     (unless node
@@ -388,7 +530,7 @@ PROC is the process.  Auto-close buffer on success after
       (unless def-node
         (user-error "Point is not within a definition"))
       (let ((text (treesit-node-text def-node t)))
-        (unison-ts--send-code-to-repl text)))))
+        (unison-ts--send-code-via-mcp text)))))
 
 (provide 'unison-ts-repl)
 
