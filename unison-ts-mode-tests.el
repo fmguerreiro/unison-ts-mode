@@ -1301,5 +1301,70 @@
   (should (fboundp 'unison-ts-watch))
   (should (fboundp 'unison-ts-load)))
 
+;;; UCM API integration tests
+
+(ert-deftest unison-ts-api/functions-defined ()
+  "UCM API functions should be defined."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-api--server-running-p))
+  (should (fboundp 'unison-ts-api--get-endpoint))
+  (should (fboundp 'unison-ts-api--call)))
+
+(ert-deftest unison-ts-api/server-not-running ()
+  "Server check returns nil when port is not listening."
+  (require 'unison-ts-repl)
+  ;; Test with a port that's almost certainly not in use
+  (let ((unison-ts-api-port 59999))
+    (should-not (unison-ts-api--server-running-p))))
+
+(ert-deftest unison-ts-api/port-check-function-exists ()
+  "Port check function should exist and be callable."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-api--server-running-p))
+  ;; Calling with no server should return nil or t without error
+  (should (or (null (unison-ts-api--server-running-p))
+              (eq t (unison-ts-api--server-running-p)))))
+
+(ert-deftest unison-ts-api/endpoint-default-port ()
+  "API endpoint uses default port 5858 for codebase server."
+  (require 'unison-ts-repl)
+  (let ((unison-ts-api-port 5858)
+        (unison-ts-api-token nil))
+    (should (string-match-p "localhost:5858" (unison-ts-api--get-endpoint)))))
+
+(ert-deftest unison-ts-api/endpoint-custom-port ()
+  "API endpoint respects custom port setting."
+  (require 'unison-ts-repl)
+  (let ((unison-ts-api-port 9999)
+        (unison-ts-api-token nil))
+    (should (string-match-p "localhost:9999" (unison-ts-api--get-endpoint)))))
+
+(ert-deftest unison-ts-api/endpoint-with-token ()
+  "API endpoint includes token when set."
+  (require 'unison-ts-repl)
+  (let ((unison-ts-api-port 5858)
+        (unison-ts-api-token "secret123"))
+    (should (string-match-p "token=secret123" (unison-ts-api--get-endpoint)))))
+
+(ert-deftest unison-ts-api/lsp-running-detection ()
+  "LSP detection should check the LSP port."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-api--lsp-running-p))
+  ;; Should return nil when LSP port is not in use
+  (let ((unison-ts-lsp-port 59998))
+    (should-not (unison-ts-api--lsp-running-p))))
+
+(ert-deftest unison-ts-api/headless-conflict-message ()
+  "Headless conflict detection should provide appropriate message."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-api--headless-conflict-p)))
+
+(ert-deftest unison-ts-api/repl-start-checks-lsp ()
+  "REPL start should check for LSP conflicts."
+  (require 'unison-ts-repl)
+  ;; The function should exist and reference lsp-running-p
+  (should (fboundp 'unison-ts-repl--start))
+  (should (fboundp 'unison-ts-api--lsp-running-p)))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

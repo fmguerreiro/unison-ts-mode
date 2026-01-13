@@ -25,9 +25,11 @@
 
 (require 'comint)
 (require 'compile)
+(require 'json)
 (require 'project)
 (require 'treesit)
 (require 'seq)
+(require 'url)
 
 (defgroup unison-ts-repl nil
   "UCM integration for Unison."
@@ -45,6 +47,105 @@ Set to nil to disable auto-close."
   :type '(choice (integer :tag "Seconds")
                  (const :tag "Disable" nil))
   :group 'unison-ts-repl)
+
+;;; UCM API Integration
+;;
+;; When UCM runs in headless mode (e.g., for LSP), it exposes an HTTP API.
+;; These functions allow sending commands via that API instead of spawning
+;; a new UCM process, avoiding codebase lock conflicts.
+
+(defcustom unison-ts-api-port 5858
+  "Port for the UCM codebase server API.
+This is the port UCM headless exposes for HTTP API requests.
+Note: This is different from the LSP port (default 5757)."
+  :type 'integer
+  :group 'unison-ts-repl)
+
+(defcustom unison-ts-api-token nil
+  "Authentication token for UCM API requests.
+If nil, no token is sent.  Set this if UCM was started with --token."
+  :type '(choice (string :tag "Token")
+                 (const :tag "None" nil))
+  :group 'unison-ts-repl)
+
+(defcustom unison-ts-api-host "localhost"
+  "Host for the UCM codebase server API."
+  :type 'string
+  :group 'unison-ts-repl)
+
+(defcustom unison-ts-lsp-port 5757
+  "Port for the UCM LSP server.
+This is the default port UCM uses for LSP (language server protocol)."
+  :type 'integer
+  :group 'unison-ts-repl)
+
+(defun unison-ts-api--port-open-p (port)
+  "Return non-nil if PORT is accepting connections on localhost."
+  (condition-case nil
+      (let ((proc (make-network-process
+                   :name "unison-port-check"
+                   :host unison-ts-api-host
+                   :service port
+                   :nowait nil)))
+        (delete-process proc)
+        t)
+    (error nil)))
+
+(defun unison-ts-api--lsp-running-p ()
+  "Return non-nil if UCM LSP server is running."
+  (unison-ts-api--port-open-p unison-ts-lsp-port))
+
+(defun unison-ts-api--headless-conflict-p ()
+  "Return non-nil if there's a potential conflict with headless UCM.
+This checks if the LSP port is in use, indicating eglot/lsp-mode
+started a headless UCM that would conflict with a new REPL instance."
+  (unison-ts-api--lsp-running-p))
+
+(defun unison-ts-api--server-running-p ()
+  "Return non-nil if a UCM headless server is accepting connections."
+  (condition-case nil
+      (let ((proc (make-network-process
+                   :name "unison-api-check"
+                   :host unison-ts-api-host
+                   :service unison-ts-api-port
+                   :nowait nil)))
+        (delete-process proc)
+        t)
+    (error nil)))
+
+(defun unison-ts-api--get-endpoint ()
+  "Return the UCM API base endpoint URL."
+  (let ((base (format "http://%s:%d" unison-ts-api-host unison-ts-api-port)))
+    (if unison-ts-api-token
+        (format "%s?token=%s" base unison-ts-api-token)
+      base)))
+
+(defvar url-request-method)
+(defvar url-request-extra-headers)
+(defvar url-request-data)
+
+(defun unison-ts-api--call (command)
+  "Send COMMAND to UCM via the HTTP API.
+Returns the response body as a string, or signals an error."
+  (let ((url-request-method "POST")
+        (url-request-extra-headers '(("Content-Type" . "application/json")))
+        (url-request-data (json-encode `((command . ,command))))
+        (endpoint (format "%s/api/ucm/command" (unison-ts-api--get-endpoint))))
+    (let ((buffer (url-retrieve-synchronously endpoint t)))
+      (when buffer
+        (unwind-protect
+            (with-current-buffer buffer
+              (goto-char (point-min))
+              (re-search-forward "^$" nil t)
+              (buffer-substring-no-properties (point) (point-max)))
+          (kill-buffer buffer))))))
+
+(defun unison-ts--send-command (command)
+  "Send COMMAND to UCM, preferring API if headless server is running.
+Falls back to REPL if no headless server is available."
+  (if (unison-ts-api--server-running-p)
+      (unison-ts-api--call command)
+    (unison-ts--send-to-repl command)))
 
 (defun unison-ts-project-root ()
   "Find Unison project root by looking for .unison directory.
@@ -129,19 +230,27 @@ Returns nil if UCM process is not running."
 Checks for existing UCM processes and handles conflicts."
   (unison-ts--ensure-ucm)
   (let ((existing-buf (unison-ts--find-ucm-buffer))
-        (external-pids (unison-ts--external-ucm-pids)))
+        (external-pids (unison-ts--external-ucm-pids))
+        (lsp-running (unison-ts-api--lsp-running-p)))
     (cond
-     (existing-buf
-      (when (yes-or-no-p (format "UCM already running in buffer %s. Switch to it? "
-                                 (buffer-name existing-buf)))
-        existing-buf))
+     ;; Already have a REPL buffer - just use it
+     (existing-buf existing-buf)
+     ;; LSP/headless conflict - kill it and start REPL
+     ;; This is the common case from GitHub issue #2
+     ((and lsp-running external-pids)
+      (message "Stopping UCM LSP server to start REPL...")
+      (unison-ts--kill-external-ucm)
+      (sit-for 1)
+      (unison-ts-repl--do-start))
+     ;; External UCM running (not LSP) - kill it
      (external-pids
-      (if (yes-or-no-p (format "UCM already running externally (PID: %s).  Kill and start in Emacs? "
-                               (mapconcat #'number-to-string external-pids ", ")))
-          (progn
-            (unison-ts--kill-external-ucm)
-            (unison-ts-repl--do-start))
-        (user-error "Cannot start UCM while another instance is running")))
+      (message "Stopping external UCM to start REPL...")
+      (unison-ts--kill-external-ucm)
+      (unison-ts-repl--do-start))
+     ;; LSP port open but no UCM process found - something else on that port
+     (lsp-running
+      (user-error "Port %d is in use (LSP port). Cannot start UCM REPL" unison-ts-lsp-port))
+     ;; All clear - start fresh
      (t
       (unison-ts-repl--do-start)))))
 
