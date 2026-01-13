@@ -438,12 +438,10 @@ Short success messages go to minibuffer, errors/long output to a buffer."
                   (outputs (seq-filter
                             (lambda (msg) (not (string-match-p "^Loading changes" msg)))
                             (seq-uniq (append (alist-get 'outputMessages parsed) nil)))))
-              (if (and (= (length errors) 0)
-                       (<= (length outputs) 2)
-                       (seq-every-p (lambda (s) (< (length s) 50)) outputs))
-                  ;; Short success → minibuffer
+              (if (= (length errors) 0)
+                  ;; Success → minibuffer
                   (message "UCM: %s" (string-join outputs " "))
-                ;; Errors or long output → buffer
+                ;; Errors → buffer
                 (unison-ts--display-in-buffer title errors outputs)))
           ;; Non-parsed output → buffer
           (unison-ts--display-in-buffer title nil (list (format "%s" parsed)))))
