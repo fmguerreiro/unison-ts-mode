@@ -54,17 +54,8 @@ Set to nil to disable auto-close."
 ;; commands without codebase lock conflicts. This is the preferred method
 ;; when LSP is running.
 
-(defvar unison-ts-mcp--process nil
-  "The UCM MCP subprocess.")
-
 (defvar unison-ts-mcp--request-id 0
   "Counter for JSON-RPC request IDs.")
-
-(defvar unison-ts-mcp--pending-requests (make-hash-table :test 'equal)
-  "Hash table of pending request callbacks keyed by ID.")
-
-(defvar unison-ts-mcp--response-buffer ""
-  "Buffer for accumulating MCP responses.")
 
 (defun unison-ts-mcp--make-request (method params)
   "Create a JSON-RPC 2.0 request for METHOD with PARAMS."
@@ -74,93 +65,101 @@ Set to nil to disable auto-close."
     (params . ,params)
     (id . ,unison-ts-mcp--request-id)))
 
-(defun unison-ts-mcp--filter (_proc output)
-  "Process filter for MCP subprocess receiving OUTPUT."
-  (setq unison-ts-mcp--response-buffer
-        (concat unison-ts-mcp--response-buffer output))
-  ;; Try to parse complete JSON objects (newline-delimited)
-  (while (string-match "\\`\\([^\n]+\\)\n" unison-ts-mcp--response-buffer)
-    (let* ((line (match-string 1 unison-ts-mcp--response-buffer))
-           (response (ignore-errors (json-read-from-string line))))
-      (setq unison-ts-mcp--response-buffer
-            (substring unison-ts-mcp--response-buffer (match-end 0)))
-      (when response
-        (let* ((id (alist-get 'id response))
-               (callback (gethash id unison-ts-mcp--pending-requests)))
-          (when callback
-            (remhash id unison-ts-mcp--pending-requests)
-            (funcall callback response)))))))
+(defcustom unison-ts-mcp-timeout 30
+  "Timeout in seconds for MCP requests."
+  :type 'integer
+  :group 'unison-ts-repl)
 
-(defun unison-ts-mcp--start ()
-  "Start the UCM MCP subprocess if not already running."
-  (unless (and unison-ts-mcp--process
-               (process-live-p unison-ts-mcp--process))
-    (setq unison-ts-mcp--response-buffer "")
-    (let ((default-directory (unison-ts-project-root)))
-      (setq unison-ts-mcp--process
-            (make-process
-             :name "ucm-mcp"
-             :command (list unison-ts-ucm-executable "mcp")
-             :buffer nil
-             :filter #'unison-ts-mcp--filter
-             :sentinel (lambda (_proc _event)
-                         (setq unison-ts-mcp--process nil)))))
-    ;; Initialize the MCP connection
-    (unison-ts-mcp--send-sync
-     "initialize"
-     `((protocolVersion . "2024-11-05")
-       (capabilities . ())
-       (clientInfo . ((name . "unison-ts-mode")
-                      (version . "0.1.0"))))))
-  unison-ts-mcp--process)
-
-(defun unison-ts-mcp--send (method params callback)
-  "Send METHOD with PARAMS to MCP, calling CALLBACK with response."
-  (unison-ts-mcp--start)
-  (let* ((request (unison-ts-mcp--make-request method params))
-         (json-str (concat (json-encode request) "\n")))
-    (puthash (alist-get 'id request) callback unison-ts-mcp--pending-requests)
-    (process-send-string unison-ts-mcp--process json-str)))
-
-(defun unison-ts-mcp--send-sync (method params)
-  "Send METHOD with PARAMS to MCP and wait for response."
-  (let ((response nil)
-        (done nil))
-    (unison-ts-mcp--send method params
-                         (lambda (resp)
-                           (setq response resp)
-                           (setq done t)))
-    (while (not done)
-      (accept-process-output unison-ts-mcp--process 0.1))
-    response))
+(defun unison-ts-mcp--call (requests)
+  "Send REQUESTS to ucm mcp and return list of responses.
+REQUESTS is a list of (method . params) cons cells.
+Uses synchronous subprocess call to avoid async complexity."
+  (let* ((default-directory (unison-ts-project-root))
+         (empty-obj (make-hash-table))
+         ;; Build init request + all other requests
+         (init-req (unison-ts-mcp--make-request
+                    "initialize"
+                    `((protocolVersion . "2024-11-05")
+                      (capabilities . ,empty-obj)
+                      (clientInfo . ((name . "unison-ts-mode")
+                                     (version . "0.1.0"))))))
+         (all-requests (cons init-req
+                             (mapcar (lambda (r)
+                                       (unison-ts-mcp--make-request (car r) (cdr r)))
+                                     requests)))
+         ;; Build input string (newline-delimited JSON)
+         (input (mapconcat #'json-encode all-requests "\n"))
+         ;; Call ucm mcp synchronously
+         (output (with-temp-buffer
+                   (let ((exit-code (call-process-region
+                                     input nil
+                                     unison-ts-ucm-executable
+                                     nil t nil
+                                     "mcp")))
+                     (unless (zerop exit-code)
+                       (user-error "UCM MCP failed with exit code %d: %s"
+                                   exit-code (buffer-string)))
+                     (buffer-string))))
+         ;; Parse responses (skip first one which is init response)
+         (lines (split-string output "\n" t))
+         (responses (mapcar (lambda (line)
+                              (condition-case nil
+                                  (json-read-from-string line)
+                                (error nil)))
+                            lines)))
+    ;; Return responses after init (skip first)
+    (cdr responses)))
 
 (defun unison-ts-mcp--call-tool (tool-name arguments)
   "Call MCP tool TOOL-NAME with ARGUMENTS synchronously."
-  (let ((response (unison-ts-mcp--send-sync
-                   "tools/call"
-                   `((name . ,tool-name)
-                     (arguments . ,arguments)))))
+  (let* ((responses (unison-ts-mcp--call
+                     `(("tools/call" . ((name . ,tool-name)
+                                        (arguments . ,(or arguments (make-hash-table))))))))
+         (response (car responses)))
     (alist-get 'result response)))
 
-(defun unison-ts-mcp--update-definitions (project-path code)
-  "Update definitions in PROJECT-PATH with CODE via MCP."
-  (unison-ts-mcp--call-tool
-   "update-definitions"
-   `((projectPath . ,project-path)
-     (code . ,code))))
+(defun unison-ts-mcp--get-project-context ()
+  "Get the current project context (name and branch) via MCP."
+  (let ((result (unison-ts-mcp--call-tool "get-current-project-context" nil)))
+    (when result
+      (let* ((content-array (alist-get 'content result))
+             (content (if (vectorp content-array)
+                          (aref content-array 0)
+                        (car content-array))))
+        (when (and content (equal (alist-get 'type content) "text"))
+          (json-read-from-string (alist-get 'text content)))))))
 
-(defun unison-ts-mcp--run-tests (project-path)
-  "Run tests in PROJECT-PATH via MCP."
-  (unison-ts-mcp--call-tool
-   "run-tests"
-   `((projectPath . ,project-path))))
+(defun unison-ts-mcp--update-definitions (code)
+  "Update definitions with CODE via MCP."
+  (let ((ctx (unison-ts-mcp--get-project-context)))
+    (unless ctx
+      (user-error "No Unison project context found. Open a project first"))
+    (unison-ts-mcp--call-tool
+     "update-definitions"
+     `((projectContext . ((projectName . ,(alist-get 'projectName ctx))
+                          (branchName . ,(alist-get 'branchName ctx))))
+       (code . ((text . ,code)))))))
 
-(defun unison-ts-mcp--run (project-path definition)
-  "Run DEFINITION in PROJECT-PATH via MCP."
-  (unison-ts-mcp--call-tool
-   "run"
-   `((projectPath . ,project-path)
-     (definition . ,definition))))
+(defun unison-ts-mcp--run-tests ()
+  "Run tests in current project via MCP."
+  (let ((ctx (unison-ts-mcp--get-project-context)))
+    (unless ctx
+      (user-error "No Unison project context found. Open a project first"))
+    (unison-ts-mcp--call-tool
+     "run-tests"
+     `((projectContext . ((projectName . ,(alist-get 'projectName ctx))
+                          (branchName . ,(alist-get 'branchName ctx))))))))
+
+(defun unison-ts-mcp--run (definition)
+  "Run DEFINITION in current project via MCP."
+  (let ((ctx (unison-ts-mcp--get-project-context)))
+    (unless ctx
+      (user-error "No Unison project context found. Open a project first"))
+    (unison-ts-mcp--call-tool
+     "run"
+     `((projectContext . ((projectName . ,(alist-get 'projectName ctx))
+                          (branchName . ,(alist-get 'branchName ctx))))
+       (definition . ,definition)))))
 
 ;;; UCM API Integration (Legacy HTTP API)
 ;;
@@ -423,11 +422,16 @@ PROC is the process.  Auto-close buffer on success after
             (let ((content (or (alist-get 'content result)
                                (alist-get 'text result)
                                (json-encode result))))
-              (if (listp content)
-                  ;; MCP returns content as array of {type, text} objects
-                  (dolist (item content)
-                    (insert (or (alist-get 'text item) (format "%S" item)) "\n"))
-                (insert (format "%s" content))))
+              (cond
+               ((vectorp content)
+                (seq-do (lambda (item)
+                          (insert (or (alist-get 'text item) (format "%S" item)) "\n"))
+                        content))
+               ((listp content)
+                (dolist (item content)
+                  (insert (or (alist-get 'text item) (format "%S" item)) "\n")))
+               (t
+                (insert (format "%s" content)))))
           (insert (format "%S" result)))
         (goto-char (point-min))
         (special-mode)))
@@ -435,25 +439,21 @@ PROC is the process.  Auto-close buffer on success after
 
 ;;;###autoload
 (defun unison-ts-add ()
-  "Add definitions from the current file to the codebase.
-Uses MCP when available, falls back to REPL."
+  "Add definitions from the current file to the codebase via MCP."
   (interactive)
   (if (buffer-file-name)
       (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
-             (project-path (unison-ts-project-root))
-             (result (unison-ts-mcp--update-definitions project-path code)))
+             (result (unison-ts-mcp--update-definitions code)))
         (unison-ts--display-mcp-result result "add"))
     (user-error "Buffer is not visiting a file")))
 
 ;;;###autoload
 (defun unison-ts-update ()
-  "Update existing definitions in the codebase.
-Uses MCP when available, falls back to REPL."
+  "Update existing definitions in the codebase via MCP."
   (interactive)
   (if (buffer-file-name)
       (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
-             (project-path (unison-ts-project-root))
-             (result (unison-ts-mcp--update-definitions project-path code)))
+             (result (unison-ts-mcp--update-definitions code)))
         (unison-ts--display-mcp-result result "update"))
     (user-error "Buffer is not visiting a file")))
 
@@ -461,8 +461,7 @@ Uses MCP when available, falls back to REPL."
 (defun unison-ts-test ()
   "Run tests in the current project via MCP."
   (interactive)
-  (let* ((project-path (unison-ts-project-root))
-         (result (unison-ts-mcp--run-tests project-path)))
+  (let ((result (unison-ts-mcp--run-tests)))
     (unison-ts--display-mcp-result result "test")))
 
 ;;;###autoload
@@ -470,21 +469,21 @@ Uses MCP when available, falls back to REPL."
   "Run a term from the codebase via MCP."
   (interactive)
   (let* ((term (read-string "Term to run: "))
-         (project-path (unison-ts-project-root))
-         (result (unison-ts-mcp--run project-path term)))
+         (result (unison-ts-mcp--run term)))
     (unison-ts--display-mcp-result result "run")))
 
 ;;;###autoload
 (defun unison-ts-watch ()
-  "Watch current file - typecheck and show results via MCP."
+  "Typecheck current file and show results via MCP."
   (interactive)
   (if buffer-file-name
       (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
-             (project-path (unison-ts-project-root))
+             (ctx (unison-ts-mcp--get-project-context))
              (result (unison-ts-mcp--call-tool
                       "typecheck-code"
-                      `((projectPath . ,project-path)
-                        (code . ,code)))))
+                      `((projectContext . ((projectName . ,(alist-get 'projectName ctx))
+                                           (branchName . ,(alist-get 'branchName ctx))))
+                        (code . ((text . ,code)))))))
         (unison-ts--display-mcp-result result "watch"))
     (user-error "Buffer is not visiting a file")))
 
@@ -494,15 +493,13 @@ Uses MCP when available, falls back to REPL."
   (interactive)
   (if buffer-file-name
       (let* ((code (buffer-substring-no-properties (point-min) (point-max)))
-             (project-path (unison-ts-project-root))
-             (result (unison-ts-mcp--update-definitions project-path code)))
+             (result (unison-ts-mcp--update-definitions code)))
         (unison-ts--display-mcp-result result "load"))
     (user-error "Buffer is not visiting a file")))
 
 (defun unison-ts--send-code-via-mcp (code)
-  "Send CODE to UCM via MCP for typechecking/updating."
-  (let* ((project-path (unison-ts-project-root))
-         (result (unison-ts-mcp--update-definitions project-path code)))
+  "Send CODE to UCM via MCP for updating."
+  (let ((result (unison-ts-mcp--update-definitions code)))
     (unison-ts--display-mcp-result result "eval")))
 
 ;;;###autoload

@@ -1371,9 +1371,9 @@
 (ert-deftest unison-ts-mcp/client-functions-defined ()
   "MCP client functions should be defined."
   (require 'unison-ts-repl)
-  (should (fboundp 'unison-ts-mcp--start))
-  (should (fboundp 'unison-ts-mcp--send))
-  (should (fboundp 'unison-ts-mcp--call-tool)))
+  (should (fboundp 'unison-ts-mcp--call))
+  (should (fboundp 'unison-ts-mcp--call-tool))
+  (should (fboundp 'unison-ts-mcp--get-project-context)))
 
 (ert-deftest unison-ts-mcp/jsonrpc-format ()
   "MCP messages should be valid JSON-RPC 2.0."
