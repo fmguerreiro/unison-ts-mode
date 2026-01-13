@@ -438,8 +438,8 @@ PROC is the process.  Auto-close buffer on success after
                    (parsed (when text (unison-ts--parse-mcp-output text))))
               (cond
                ((and (listp parsed) (not (stringp parsed)))
-                (let ((errors (alist-get 'errorMessages parsed))
-                      (outputs (alist-get 'outputMessages parsed)))
+                (let ((errors (seq-uniq (append (alist-get 'errorMessages parsed) nil)))
+                      (outputs (seq-uniq (append (alist-get 'outputMessages parsed) nil))))
                   (when (and errors (> (length errors) 0))
                     (insert "⚠️ Errors:\n")
                     (seq-do (lambda (msg) (insert msg "\n")) errors)
