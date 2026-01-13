@@ -424,36 +424,44 @@ PROC is the process.  Auto-close buffer on success after
     (error text)))
 
 (defun unison-ts--display-mcp-result (result title)
-  "Display MCP RESULT in a buffer with TITLE."
+  "Display MCP RESULT appropriately based on content.
+Short success messages go to minibuffer, errors/long output to a buffer."
+  (if (and result (listp result))
+      (let* ((content-array (alist-get 'content result))
+             (content (if (vectorp content-array)
+                          (aref content-array 0)
+                        (car content-array)))
+             (text (alist-get 'text content))
+             (parsed (when text (unison-ts--parse-mcp-output text))))
+        (if (and (listp parsed) (not (stringp parsed)))
+            (let ((errors (seq-uniq (append (alist-get 'errorMessages parsed) nil)))
+                  (outputs (seq-filter
+                            (lambda (msg) (not (string-match-p "^Loading changes" msg)))
+                            (seq-uniq (append (alist-get 'outputMessages parsed) nil)))))
+              (if (and (= (length errors) 0)
+                       (<= (length outputs) 2)
+                       (seq-every-p (lambda (s) (< (length s) 50)) outputs))
+                  ;; Short success → minibuffer
+                  (message "UCM: %s" (string-join outputs " "))
+                ;; Errors or long output → buffer
+                (unison-ts--display-in-buffer title errors outputs)))
+          ;; Non-parsed output → buffer
+          (unison-ts--display-in-buffer title nil (list (format "%s" parsed)))))
+    ;; Fallback → buffer
+    (unison-ts--display-in-buffer title nil (list (format "%S" result)))))
+
+(defun unison-ts--display-in-buffer (title errors outputs)
+  "Display ERRORS and OUTPUTS in a *UCM: TITLE* buffer."
   (let ((buf (get-buffer-create (format "*UCM: %s*" title))))
     (with-current-buffer buf
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (if (and result (listp result))
-            (let* ((content-array (alist-get 'content result))
-                   (content (if (vectorp content-array)
-                                (aref content-array 0)
-                              (car content-array)))
-                   (text (alist-get 'text content))
-                   (parsed (when text (unison-ts--parse-mcp-output text))))
-              (cond
-               ((and (listp parsed) (not (stringp parsed)))
-                (let ((errors (seq-uniq (append (alist-get 'errorMessages parsed) nil)))
-                      (outputs (seq-uniq (append (alist-get 'outputMessages parsed) nil))))
-                  (when (and errors (> (length errors) 0))
-                    (insert "⚠️ Errors:\n")
-                    (seq-do (lambda (msg) (insert msg "\n")) errors)
-                    (insert "\n"))
-                  (when (and outputs (> (length outputs) 0))
-                    (seq-do (lambda (msg)
-                              (unless (string-match-p "^Loading changes" msg)
-                                (insert msg "\n")))
-                            outputs))))
-               (parsed
-                (insert (format "%s" parsed)))
-               (t
-                (insert (format "%S" result)))))
-          (insert (format "%S" result)))
+        (when (and errors (> (length errors) 0))
+          (insert "⚠️ Errors:\n")
+          (seq-do (lambda (msg) (insert msg "\n")) errors)
+          (insert "\n"))
+        (when outputs
+          (seq-do (lambda (msg) (insert msg "\n")) outputs))
         (goto-char (point-min))
         (special-mode)))
     (display-buffer buf)))
