@@ -412,6 +412,17 @@ PROC is the process.  Auto-close buffer on success after
       (comint-send-string (get-buffer-process buf) (concat command "\n")))
     (display-buffer buf)))
 
+(defun unison-ts--parse-mcp-output (text)
+  "Parse MCP output TEXT which may be JSON-encoded UCM response."
+  (condition-case nil
+      (let ((parsed (json-read-from-string text)))
+        (if (and (listp parsed)
+                 (or (alist-get 'errorMessages parsed)
+                     (alist-get 'outputMessages parsed)))
+            parsed
+          text))
+    (error text)))
+
 (defun unison-ts--display-mcp-result (result title)
   "Display MCP RESULT in a buffer with TITLE."
   (let ((buf (get-buffer-create (format "*UCM: %s*" title))))
@@ -419,19 +430,29 @@ PROC is the process.  Auto-close buffer on success after
       (let ((inhibit-read-only t))
         (erase-buffer)
         (if (and result (listp result))
-            (let ((content (or (alist-get 'content result)
-                               (alist-get 'text result)
-                               (json-encode result))))
+            (let* ((content-array (alist-get 'content result))
+                   (content (if (vectorp content-array)
+                                (aref content-array 0)
+                              (car content-array)))
+                   (text (alist-get 'text content))
+                   (parsed (when text (unison-ts--parse-mcp-output text))))
               (cond
-               ((vectorp content)
-                (seq-do (lambda (item)
-                          (insert (or (alist-get 'text item) (format "%S" item)) "\n"))
-                        content))
-               ((listp content)
-                (dolist (item content)
-                  (insert (or (alist-get 'text item) (format "%S" item)) "\n")))
+               ((and (listp parsed) (not (stringp parsed)))
+                (let ((errors (alist-get 'errorMessages parsed))
+                      (outputs (alist-get 'outputMessages parsed)))
+                  (when (and errors (> (length errors) 0))
+                    (insert "⚠️ Errors:\n")
+                    (seq-do (lambda (msg) (insert msg "\n")) errors)
+                    (insert "\n"))
+                  (when (and outputs (> (length outputs) 0))
+                    (seq-do (lambda (msg)
+                              (unless (string-match-p "^Loading changes" msg)
+                                (insert msg "\n")))
+                            outputs))))
+               (parsed
+                (insert (format "%s" parsed)))
                (t
-                (insert (format "%s" content)))))
+                (insert (format "%S" result)))))
           (insert (format "%S" result)))
         (goto-char (point-min))
         (special-mode)))
