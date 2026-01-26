@@ -376,7 +376,10 @@ Type `help' in the REPL for available commands."
                         'face 'comint-highlight-prompt
                         'read-only t
                         'rear-nonsticky t))
-    (set-marker unison-ts-mcp-repl--input-start (point))))
+    (set-marker unison-ts-mcp-repl--input-start (point))
+    ;; Update process mark for comint history navigation
+    (when-let ((proc (get-buffer-process (current-buffer))))
+      (set-marker (process-mark proc) (point)))))
 
 (defun unison-ts-mcp-repl-bol ()
   "Move to beginning of line, but after the prompt."
@@ -658,6 +661,11 @@ This ensures a single UCM process serves both LSP (eglot) and REPL."
     (with-current-buffer buf
       (unless (derived-mode-p 'unison-ts-mcp-repl-mode)
         (unison-ts-mcp-repl-mode))
+      ;; Create a dummy process for comint history navigation
+      ;; Comint needs a process mark to know where the command line starts
+      (unless (get-buffer-process buf)
+        (let ((proc (start-process "ucm-mcp-repl" buf "tail" "-f" "/dev/null")))
+          (set-process-query-on-exit-flag proc nil)))
       (setq-local comint-input-ring (make-ring comint-input-ring-size))
       (setq unison-ts-mcp-repl--project-root root)
       (setq default-directory root)
