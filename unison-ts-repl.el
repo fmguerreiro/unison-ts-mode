@@ -47,6 +47,9 @@ Set to nil to disable auto-close."
                  (const :tag "Disable" nil))
   :group 'unison-ts-repl)
 
+(defconst unison-ts--lsp-startup-max-attempts 100
+  "Maximum attempts to wait for LSP server startup (0.1s each = 10s total).")
+
 ;;; UCM MCP Client
 ;;
 ;; UCM provides an MCP (Model Context Protocol) server that allows sending
@@ -126,9 +129,13 @@ If CALLBACK is nil, runs synchronously and returns responses."
   "Parse MCP responses from OUTPUT string, skipping init response."
   (let* ((lines (split-string output "\n" t))
          (responses (mapcar (lambda (line)
-                              (condition-case _err
+                              (condition-case err
                                   (json-read-from-string line)
-                                (error nil)))
+                                (error
+                                 (lwarn 'unison-ts-mcp :error
+                                        "Failed to parse MCP response: %S\nLine: %s"
+                                        err line)
+                                 nil)))
                             lines)))
     (cdr responses)))
 
@@ -588,6 +595,15 @@ Returns nil if no REPL buffer exists or it's not usable."
 (defvar unison-ts--ucm-headless-process nil
   "Process object for UCM headless started by us.")
 
+(defun unison-ts--cleanup-ucm-headless ()
+  "Clean up UCM headless process on Emacs exit."
+  (when (and unison-ts--ucm-headless-process
+             (process-live-p unison-ts--ucm-headless-process))
+    (delete-process unison-ts--ucm-headless-process)
+    (setq unison-ts--ucm-headless-process nil)))
+
+(add-hook 'kill-emacs-hook #'unison-ts--cleanup-ucm-headless)
+
 (defun unison-ts--start-ucm-headless ()
   "Start UCM in headless mode if not already running.
 Returns non-nil when UCM headless is ready."
@@ -597,9 +613,10 @@ Returns non-nil when UCM headless is ready."
       (setq unison-ts--ucm-headless-process
             (start-process "ucm-headless" "*ucm-headless*"
                            unison-ts-ucm-executable "headless"))
+      (set-process-query-on-exit-flag unison-ts--ucm-headless-process nil)
       ;; Wait for LSP port to be ready (max 10 seconds)
       (let ((attempts 0))
-        (while (and (< attempts 100)
+        (while (and (< attempts unison-ts--lsp-startup-max-attempts)
                     (not (unison-ts-api--lsp-running-p)))
           (sit-for 0.1)
           (setq attempts (1+ attempts))))
