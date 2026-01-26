@@ -372,7 +372,6 @@ Returns the buffer or nil."
 
 (defvar unison-ts-mcp-repl-mode-map
   (let ((map (make-sparse-keymap)))
-    (set-keymap-parent map comint-mode-map)
     (define-key map (kbd "RET") #'unison-ts-mcp-repl-send)
     (define-key map (kbd "C-c M-o") #'unison-ts-mcp-repl-clear)
     (define-key map (kbd "C-a") #'unison-ts-mcp-repl-bol)
@@ -385,14 +384,19 @@ Returns the buffer or nil."
   "Send INPUT to UCM via MCP (ignores PROC since we don't use subprocess)."
   (let ((parsed (unison-ts-mcp-repl--parse-command input)))
     (when parsed
+      (message "Processing...")
       (condition-case err
-          (let ((result (unison-ts-mcp-repl--execute (car parsed) (cdr parsed))))
-            (unison-ts-mcp-repl--insert-response result))
+          (unison-ts-mcp-repl--execute-async
+           (car parsed)
+           (cdr parsed)
+           (lambda (result)
+             (unison-ts-mcp-repl--insert-response result)
+             (unison-ts-mcp-repl--insert-prompt)))
         (error
-         (unison-ts-mcp-repl--insert-error (error-message-string err)))))
-    (unison-ts-mcp-repl--insert-prompt)))
+         (unison-ts-mcp-repl--insert-error (error-message-string err))
+         (unison-ts-mcp-repl--insert-prompt))))))
 
-(define-derived-mode unison-ts-mcp-repl-mode comint-mode "UCM-MCP"
+(define-derived-mode unison-ts-mcp-repl-mode fundamental-mode "UCM-MCP"
   "Major mode for interacting with UCM via MCP protocol.
 This mode sends commands to UCM via MCP, avoiding codebase lock
 conflicts with headless UCM (LSP).
@@ -402,10 +406,9 @@ Key bindings:
 
 Type `help' in the REPL for available commands."
   :group 'unison-ts-repl
-  (setq-local comint-prompt-regexp "^[^>\n]*> ")
-  (setq-local comint-input-sender #'unison-ts-mcp-repl--input-sender)
-  (setq-local comint-process-echoes nil)
-  (setq-local unison-ts-mcp-repl--input-start (make-marker)))
+  (setq-local unison-ts-mcp-repl--input-start (make-marker))
+  (setq-local unison-ts-mcp-repl--history-index -1)
+  (setq-local unison-ts-mcp-repl--saved-input nil))
 
 (defun unison-ts-mcp-repl--insert-prompt ()
   "Insert the REPL prompt and set up input marker."
@@ -502,64 +505,80 @@ Examples:
      (t
       (cons 'watch trimmed)))))
 
-(defun unison-ts-mcp-repl--execute (command args)
-  "Execute MCP COMMAND with ARGS and return result string."
+(defun unison-ts-mcp-repl--execute-async (command args callback)
+  "Execute MCP COMMAND with ARGS asynchronously, calling CALLBACK with result string."
   (let ((default-directory (or unison-ts-mcp-repl--project-root
-                               default-directory)))
+                               default-directory))
+        (repl-buffer (current-buffer)))
     (if (eq command 'help)
-        unison-ts-mcp-repl--help-text
+        (funcall callback unison-ts-mcp-repl--help-text)
       (unison-ts-mcp--with-project-context
        (lambda (project-name branch-name)
          (let ((ctx (unison-ts-mcp--make-project-context project-name branch-name)))
            (pcase command
              ('watch
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "typecheck-code"
-                (append ctx `((code . ((sourceCode . ,(if (string-prefix-p ">" args)
-                                                          args
-                                                        (concat "> " args))))))))))
+              (unison-ts-mcp--call-tool
+               "typecheck-code"
+               (append ctx `((code . ((sourceCode . ,(if (string-prefix-p ">" args)
+                                                         args
+                                                       (concat "> " args)))))))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              ('add
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "update-definitions"
-                (append ctx `((code . ((text . ,args))))))))
+              (unison-ts-mcp--call-tool
+               "update-definitions"
+               (append ctx `((code . ((text . ,args)))))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              ('test
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "run-tests"
-                (append ctx (when args `((subnamespace . ,args)))))))
+              (unison-ts-mcp--call-tool
+               "run-tests"
+               (append ctx (when args `((subnamespace . ,args))))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              ('run
               (let ((func-name (car args))
                     (func-args (cdr args)))
-                (unison-ts-mcp-repl--format-result
-                 (unison-ts-mcp--call-tool
-                  "run"
-                  (append ctx `((mainFunctionName . ,func-name)
-                                (args . ,(or func-args []))))))))
+                (unison-ts-mcp--call-tool
+                 "run"
+                 (append ctx `((mainFunctionName . ,func-name)
+                               (args . ,(or func-args []))))
+                 (lambda (result)
+                   (with-current-buffer repl-buffer
+                     (funcall callback (unison-ts-mcp-repl--format-result result)))))))
              ('view
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "view-definitions"
-                (append ctx `((names . ,args))))))
+              (unison-ts-mcp--call-tool
+               "view-definitions"
+               (append ctx `((names . ,args)))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              ('find-name
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "search-definitions-by-name"
-                (append ctx `((query . ,args))))))
+              (unison-ts-mcp--call-tool
+               "search-definitions-by-name"
+               (append ctx `((query . ,args)))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              ('find-type
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "search-by-type"
-                (append ctx `((query . ,args))))))
+              (unison-ts-mcp--call-tool
+               "search-by-type"
+               (append ctx `((query . ,args)))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              ('docs
-              (unison-ts-mcp-repl--format-result
-               (unison-ts-mcp--call-tool
-                "docs"
-                (append ctx `((name . ,args))))))
+              (unison-ts-mcp--call-tool
+               "docs"
+               (append ctx `((name . ,args)))
+               (lambda (result)
+                 (with-current-buffer repl-buffer
+                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
              (_
-              (format "Unknown command: %s\nType 'help' for available commands." command)))))))))
-
+              (funcall callback (format "Unknown command: %s\nType 'help' for available commands." command))))))))))
 (defun unison-ts-mcp-repl--format-result (result)
   "Format MCP RESULT for display in REPL."
   (if result
