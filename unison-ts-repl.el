@@ -329,12 +329,55 @@ Returns the buffer or nil."
 (defvar-local unison-ts-mcp-repl--project-root nil
   "Project root associated with this MCP REPL buffer.")
 
+(defvar-local unison-ts-mcp-repl--history-index -1
+  "Current position in history ring. -1 means not navigating history.")
+
+(defvar-local unison-ts-mcp-repl--saved-input nil
+  "Input saved before starting history navigation.")
+
+(defun unison-ts-mcp-repl--replace-input (text)
+  "Replace current input with TEXT."
+  (let ((inhibit-read-only t))
+    (delete-region (marker-position unison-ts-mcp-repl--input-start) (point-max))
+    (goto-char (point-max))
+    (insert text)))
+
+(defun unison-ts-mcp-repl-previous-input ()
+  "Navigate to previous input in history."
+  (interactive)
+  (when (and comint-input-ring (not (ring-empty-p comint-input-ring)))
+    (let ((ring-len (ring-length comint-input-ring)))
+      ;; Save current input when starting navigation
+      (when (< unison-ts-mcp-repl--history-index 0)
+        (setq unison-ts-mcp-repl--saved-input (unison-ts-mcp-repl--get-input)))
+      ;; Move back in history
+      (when (< unison-ts-mcp-repl--history-index (1- ring-len))
+        (setq unison-ts-mcp-repl--history-index (1+ unison-ts-mcp-repl--history-index))
+        (unison-ts-mcp-repl--replace-input
+         (ring-ref comint-input-ring unison-ts-mcp-repl--history-index))))))
+
+(defun unison-ts-mcp-repl-next-input ()
+  "Navigate to next input in history."
+  (interactive)
+  (cond
+   ;; At newest history entry, restore saved input
+   ((= unison-ts-mcp-repl--history-index 0)
+    (setq unison-ts-mcp-repl--history-index -1)
+    (unison-ts-mcp-repl--replace-input (or unison-ts-mcp-repl--saved-input "")))
+   ;; Navigate forward in history
+   ((> unison-ts-mcp-repl--history-index 0)
+    (setq unison-ts-mcp-repl--history-index (1- unison-ts-mcp-repl--history-index))
+    (unison-ts-mcp-repl--replace-input
+     (ring-ref comint-input-ring unison-ts-mcp-repl--history-index)))))
+
 (defvar unison-ts-mcp-repl-mode-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map comint-mode-map)
     (define-key map (kbd "RET") #'unison-ts-mcp-repl-send)
     (define-key map (kbd "C-c M-o") #'unison-ts-mcp-repl-clear)
     (define-key map (kbd "C-a") #'unison-ts-mcp-repl-bol)
+    (define-key map (kbd "M-p") #'unison-ts-mcp-repl-previous-input)
+    (define-key map (kbd "M-n") #'unison-ts-mcp-repl-next-input)
     map)
   "Keymap for `unison-ts-mcp-repl-mode'.")
 
@@ -376,10 +419,7 @@ Type `help' in the REPL for available commands."
                         'face 'comint-highlight-prompt
                         'read-only t
                         'rear-nonsticky t))
-    (set-marker unison-ts-mcp-repl--input-start (point))
-    ;; Update process mark for comint history navigation
-    (when-let ((proc (get-buffer-process (current-buffer))))
-      (set-marker (process-mark proc) (point)))))
+    (set-marker unison-ts-mcp-repl--input-start (point))))
 
 (defun unison-ts-mcp-repl-bol ()
   "Move to beginning of line, but after the prompt."
@@ -558,9 +598,14 @@ Examples:
   "Send current input to UCM via MCP."
   (interactive)
   (let ((input (string-trim (unison-ts-mcp-repl--get-input))))
+    ;; Add to history ring
     (when (and (boundp 'comint-input-ring) comint-input-ring
                (not (string-empty-p input)))
       (ring-insert comint-input-ring input))
+    ;; Reset history navigation state
+    (setq unison-ts-mcp-repl--history-index -1)
+    (setq unison-ts-mcp-repl--saved-input nil)
+    ;; Make input read-only and send
     (let ((inhibit-read-only t))
       (goto-char (point-max))
       (insert "\n")
@@ -661,11 +706,6 @@ This ensures a single UCM process serves both LSP (eglot) and REPL."
     (with-current-buffer buf
       (unless (derived-mode-p 'unison-ts-mcp-repl-mode)
         (unison-ts-mcp-repl-mode))
-      ;; Create a dummy process for comint history navigation
-      ;; Comint needs a process mark to know where the command line starts
-      (unless (get-buffer-process buf)
-        (let ((proc (start-process "ucm-mcp-repl" buf "tail" "-f" "/dev/null")))
-          (set-process-query-on-exit-flag proc nil)))
       (setq-local comint-input-ring (make-ring comint-input-ring-size))
       (setq unison-ts-mcp-repl--project-root root)
       (setq default-directory root)
