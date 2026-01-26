@@ -404,7 +404,8 @@ Type `help' in the REPL for available commands."
   :group 'unison-ts-repl
   (setq-local unison-ts-mcp-repl--input-start (make-marker))
   (setq-local unison-ts-mcp-repl--history-index -1)
-  (setq-local unison-ts-mcp-repl--saved-input nil))
+  (setq-local unison-ts-mcp-repl--saved-input nil)
+  (setq-local comint-input-ring (make-ring comint-input-ring-size)))
 
 (defun unison-ts-mcp-repl--insert-prompt ()
   "Insert the REPL prompt and set up input marker."
@@ -707,7 +708,6 @@ This ensures a single UCM process serves both LSP (eglot) and REPL."
     (with-current-buffer buf
       (unless (derived-mode-p 'unison-ts-mcp-repl-mode)
         (unison-ts-mcp-repl-mode))
-      (setq-local comint-input-ring (make-ring comint-input-ring-size))
       (setq unison-ts-mcp-repl--project-root root)
       (setq default-directory root)
       (let ((inhibit-read-only t))
