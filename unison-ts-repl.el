@@ -359,16 +359,12 @@ Returns the buffer or nil."
 (defun unison-ts-mcp-repl-next-input ()
   "Navigate to next input in history."
   (interactive)
-  (cond
-   ;; At newest history entry, restore saved input
-   ((= unison-ts-mcp-repl--history-index 0)
-    (setq unison-ts-mcp-repl--history-index -1)
-    (unison-ts-mcp-repl--replace-input (or unison-ts-mcp-repl--saved-input "")))
-   ;; Navigate forward in history
-   ((> unison-ts-mcp-repl--history-index 0)
+  (when (>= unison-ts-mcp-repl--history-index 0)
     (setq unison-ts-mcp-repl--history-index (1- unison-ts-mcp-repl--history-index))
     (unison-ts-mcp-repl--replace-input
-     (ring-ref comint-input-ring unison-ts-mcp-repl--history-index)))))
+     (if (< unison-ts-mcp-repl--history-index 0)
+         (or unison-ts-mcp-repl--saved-input "")
+       (ring-ref comint-input-ring unison-ts-mcp-repl--history-index)))))
 
 (defvar unison-ts-mcp-repl-mode-map
   (let ((map (make-sparse-keymap)))
@@ -514,7 +510,10 @@ Examples:
         (funcall callback unison-ts-mcp-repl--help-text)
       (unison-ts-mcp--with-project-context
        (lambda (project-name branch-name)
-         (let ((ctx (unison-ts-mcp--make-project-context project-name branch-name)))
+         (let* ((ctx (unison-ts-mcp--make-project-context project-name branch-name))
+                (wrapped-callback (lambda (result)
+                                    (with-current-buffer repl-buffer
+                                      (funcall callback (unison-ts-mcp-repl--format-result result))))))
            (pcase command
              ('watch
               (unison-ts-mcp--call-tool
@@ -522,63 +521,46 @@ Examples:
                (append ctx `((code . ((sourceCode . ,(if (string-prefix-p ">" args)
                                                          args
                                                        (concat "> " args)))))))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              ('add
               (unison-ts-mcp--call-tool
                "update-definitions"
                (append ctx `((code . ((text . ,args)))))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              ('test
               (unison-ts-mcp--call-tool
                "run-tests"
                (append ctx (when args `((subnamespace . ,args))))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              ('run
-              (let ((func-name (car args))
-                    (func-args (cdr args)))
-                (unison-ts-mcp--call-tool
-                 "run"
-                 (append ctx `((mainFunctionName . ,func-name)
-                               (args . ,(or func-args []))))
-                 (lambda (result)
-                   (with-current-buffer repl-buffer
-                     (funcall callback (unison-ts-mcp-repl--format-result result)))))))
+              (unison-ts-mcp--call-tool
+               "run"
+               (append ctx `((mainFunctionName . ,(car args))
+                             (args . ,(or (cdr args) []))))
+               wrapped-callback))
              ('view
               (unison-ts-mcp--call-tool
                "view-definitions"
                (append ctx `((names . ,args)))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              ('find-name
               (unison-ts-mcp--call-tool
                "search-definitions-by-name"
                (append ctx `((query . ,args)))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              ('find-type
               (unison-ts-mcp--call-tool
                "search-by-type"
                (append ctx `((query . ,args)))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              ('docs
               (unison-ts-mcp--call-tool
                "docs"
                (append ctx `((name . ,args)))
-               (lambda (result)
-                 (with-current-buffer repl-buffer
-                   (funcall callback (unison-ts-mcp-repl--format-result result))))))
+               wrapped-callback))
              (_
               (funcall callback (format "Unknown command: %s\nType 'help' for available commands." command))))))))))
+
 (defun unison-ts-mcp-repl--format-result (result)
   "Format MCP RESULT for display in REPL."
   (if result
