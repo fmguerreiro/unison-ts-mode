@@ -331,13 +331,25 @@ Returns the buffer or nil."
 
 (defvar unison-ts-mcp-repl-mode-map
   (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map comint-mode-map)
     (define-key map (kbd "RET") #'unison-ts-mcp-repl-send)
     (define-key map (kbd "C-c M-o") #'unison-ts-mcp-repl-clear)
     (define-key map (kbd "C-a") #'unison-ts-mcp-repl-bol)
     map)
   "Keymap for `unison-ts-mcp-repl-mode'.")
 
-(define-derived-mode unison-ts-mcp-repl-mode fundamental-mode "UCM-MCP"
+(defun unison-ts-mcp-repl--input-sender (_proc input)
+  "Send INPUT to UCM via MCP (ignores PROC since we don't use subprocess)."
+  (let ((parsed (unison-ts-mcp-repl--parse-command input)))
+    (when parsed
+      (condition-case err
+          (let ((result (unison-ts-mcp-repl--execute (car parsed) (cdr parsed))))
+            (unison-ts-mcp-repl--insert-response result))
+        (error
+         (unison-ts-mcp-repl--insert-error (error-message-string err)))))
+    (unison-ts-mcp-repl--insert-prompt)))
+
+(define-derived-mode unison-ts-mcp-repl-mode comint-mode "UCM-MCP"
   "Major mode for interacting with UCM via MCP protocol.
 This mode sends commands to UCM via MCP, avoiding codebase lock
 conflicts with headless UCM (LSP).
@@ -347,6 +359,9 @@ Key bindings:
 
 Type `help' in the REPL for available commands."
   :group 'unison-ts-repl
+  (setq-local comint-prompt-regexp "^[^>\n]*> ")
+  (setq-local comint-input-sender #'unison-ts-mcp-repl--input-sender)
+  (setq-local comint-process-echoes nil)
   (setq-local unison-ts-mcp-repl--input-start (make-marker)))
 
 (defun unison-ts-mcp-repl--insert-prompt ()
@@ -539,21 +554,17 @@ Examples:
 (defun unison-ts-mcp-repl-send ()
   "Send current input to UCM via MCP."
   (interactive)
-  (let* ((input (string-trim (unison-ts-mcp-repl--get-input)))
-         (parsed (unison-ts-mcp-repl--parse-command input)))
+  (let ((input (string-trim (unison-ts-mcp-repl--get-input))))
+    (when (and (boundp 'comint-input-ring) comint-input-ring
+               (not (string-empty-p input)))
+      (ring-insert comint-input-ring input))
     (let ((inhibit-read-only t))
       (goto-char (point-max))
       (insert "\n")
       (add-text-properties (marker-position unison-ts-mcp-repl--input-start)
                            (point)
                            '(read-only t)))
-    (when parsed
-      (condition-case err
-          (let ((result (unison-ts-mcp-repl--execute (car parsed) (cdr parsed))))
-            (unison-ts-mcp-repl--insert-response result))
-        (error
-         (unison-ts-mcp-repl--insert-error (error-message-string err)))))
-    (unison-ts-mcp-repl--insert-prompt)))
+    (unison-ts-mcp-repl--input-sender nil input)))
 
 (defun unison-ts-mcp-repl--insert-response (response)
   "Insert MCP RESPONSE into the REPL buffer."
@@ -647,6 +658,7 @@ This ensures a single UCM process serves both LSP (eglot) and REPL."
     (with-current-buffer buf
       (unless (derived-mode-p 'unison-ts-mcp-repl-mode)
         (unison-ts-mcp-repl-mode))
+      (setq-local comint-input-ring (make-ring comint-input-ring-size))
       (setq unison-ts-mcp-repl--project-root root)
       (setq default-directory root)
       (let ((inhibit-read-only t))
