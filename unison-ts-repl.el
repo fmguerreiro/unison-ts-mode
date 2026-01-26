@@ -88,7 +88,6 @@ If CALLBACK is nil, runs synchronously and returns responses."
     (if callback
         ;; Async mode
         (let ((output-buffer (generate-new-buffer " *ucm-mcp-output*")))
-          (message "UCM: Processing...")
           (make-process
            :name "ucm-mcp"
            :buffer output-buffer
@@ -380,7 +379,6 @@ Returns the buffer or nil."
   "Send INPUT to UCM via MCP (ignores PROC since we don't use subprocess)."
   (let ((parsed (unison-ts-mcp-repl--parse-command input)))
     (when parsed
-      (message "Processing...")
       (condition-case err
           (unison-ts-mcp-repl--execute-async
            (car parsed)
