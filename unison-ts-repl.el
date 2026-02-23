@@ -30,15 +30,12 @@
 (require 'treesit)
 (require 'seq)
 
+(require 'unison-ts-inferior-mode)
+
 (defgroup unison-ts-repl nil
   "UCM integration for Unison."
   :group 'unison-ts
   :prefix "unison-ts-")
-
-(defcustom unison-ts-ucm-executable "ucm"
-  "Path to the UCM executable."
-  :type 'string
-  :group 'unison-ts-repl)
 
 (defcustom unison-ts-output-auto-close 2
   "Seconds to wait before closing output buffer on success.
@@ -91,7 +88,7 @@ If CALLBACK is nil, runs synchronously and returns responses."
           (make-process
            :name "ucm-mcp"
            :buffer output-buffer
-           :command (list unison-ts-ucm-executable "mcp")
+           :command (list ucm-executable "mcp")
            :connection-type 'pipe
            :sentinel (lambda (proc _event)
                        (when (memq (process-status proc) '(exit signal))
@@ -110,7 +107,7 @@ If CALLBACK is nil, runs synchronously and returns responses."
       (let ((output (with-temp-buffer
                       (let ((exit-code (call-process-region
                                         input nil
-                                        unison-ts-ucm-executable
+                                        ucm-executable
                                         nil t nil
                                         "mcp")))
                         (unless (zerop exit-code)
@@ -247,11 +244,6 @@ Falls back to `project-root' or `default-directory'."
   "Return the name of the current Unison project."
   (file-name-nondirectory (directory-file-name (unison-ts-project-root))))
 
-(defun unison-ts--ensure-ucm ()
-  "Ensure UCM executable is available.
-Signals an error if UCM is not found."
-  (unless (executable-find unison-ts-ucm-executable)
-    (user-error "UCM not found.  Install from https://unison-lang.org")))
 
 (defvar unison-ts-repl--buffers (make-hash-table :test 'equal :weakness 'value)
   "Hash table mapping project roots to their UCM REPL buffers.")
@@ -651,51 +643,18 @@ Returns nil if no REPL buffer exists or it's not usable."
         (when (derived-mode-p 'unison-ts-mcp-repl-mode)
           buf)))))
 
-(defvar unison-ts--ucm-headless-process nil
-  "Process object for UCM headless started by us.")
-
-(defun unison-ts--cleanup-ucm-headless ()
-  "Clean up UCM headless process on Emacs exit."
-  (when (and unison-ts--ucm-headless-process
-             (process-live-p unison-ts--ucm-headless-process))
-    (delete-process unison-ts--ucm-headless-process)
-    (setq unison-ts--ucm-headless-process nil)))
-
-(add-hook 'kill-emacs-hook #'unison-ts--cleanup-ucm-headless)
-
-(defun unison-ts--start-ucm-headless ()
-  "Start UCM in headless mode if not already running.
-Returns non-nil when UCM headless is ready."
-  (unless (unison-ts-api--lsp-running-p)
-    (let ((default-directory (unison-ts-project-root)))
-      (message "Starting UCM headless...")
-      (setq unison-ts--ucm-headless-process
-            (start-process "ucm-headless" "*ucm-headless*"
-                           unison-ts-ucm-executable "headless"))
-      (set-process-query-on-exit-flag unison-ts--ucm-headless-process nil)
-      ;; Wait for LSP port to be ready (max 10 seconds)
-      (let ((attempts 0))
-        (while (and (< attempts unison-ts--lsp-startup-max-attempts)
-                    (not (unison-ts-api--lsp-running-p)))
-          (sit-for 0.1)
-          (setq attempts (1+ attempts))))
-      (if (unison-ts-api--lsp-running-p)
-          (message "UCM headless started on port %d" unison-ts-lsp-port)
-        (error "Failed to start UCM headless"))))
-  t)
-
 (defun unison-ts-repl--start ()
   "Start UCM REPL for the current project.
-Always uses MCP-based REPL. If no UCM headless is running, starts one first.
+Always uses MCP-based REPL.  If no UCM is running, starts one first.
 This ensures a single UCM process serves both LSP (eglot) and REPL."
-  (unison-ts--ensure-ucm)
   (let ((existing-buf (unison-ts-repl--get-buffer)))
     (cond
      ;; Already have a usable REPL buffer
      (existing-buf existing-buf)
      ;; Start UCM headless if needed, then use MCP REPL
      (t
-      (unison-ts--start-ucm-headless)
+      (unison-ts-inferior-run-ucm)
+      (message "No running UCM was found. One was started up automatically.")
       (unison-ts-repl--start-mcp)))))
 
 (defun unison-ts-repl--start-mcp ()
