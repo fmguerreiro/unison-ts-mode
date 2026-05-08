@@ -1350,6 +1350,34 @@
   (require 'unison-ts-repl)
   (should (fboundp 'unison-ts-mcp--run)))
 
+(ert-deftest unison-ts-mcp/async-uses-process-object-not-name ()
+  "Async branch must pass the process object to process-send-string/eof, not the name string (gh#11).
+
+When Emacs auto-uniquifies the process name (e.g. ucm-mcp<2>), sending to the
+string \"ucm-mcp\" hits a dead process.  Binding the return value of
+make-process and using it directly eliminates both the name-collision and the
+stale-lookup failure modes."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((fake-proc (start-process "test-fake-mcp" nil "true"))
+        (send-string-targets nil)
+        (send-eof-targets nil))
+    (cl-letf (((symbol-function 'make-process)
+               (lambda (&rest _args) fake-proc))
+              ((symbol-function 'process-send-string)
+               (lambda (proc _string)
+                 (push proc send-string-targets)))
+              ((symbol-function 'process-send-eof)
+               (lambda (proc)
+                 (push proc send-eof-targets))))
+      (unison-ts-mcp--call '(("noop" . nil)) (lambda (_) nil)))
+    (should send-string-targets)
+    (should send-eof-targets)
+    (should (cl-every (lambda (target) (eq target fake-proc)) send-string-targets))
+    (should (cl-every (lambda (target) (eq target fake-proc)) send-eof-targets))
+    (should (cl-notany (lambda (target) (stringp target)) send-string-targets))
+    (should (cl-notany (lambda (target) (stringp target)) send-eof-targets))))
+
 ;;; Inferior UCM (gh#8) — full UCM in a comint buffer, no separate `ucm headless'
 
 (ert-deftest unison-ts-inferior/mode-defined ()
