@@ -730,10 +730,16 @@ LSP/MCP port never becomes reachable after starting."
       nil)
      (t
       (let* ((default-directory (unison-ts-project-root))
-             (buf (make-comint-in-buffer "ucm" buf-name
-                                         unison-ts-ucm-executable nil)))
+             (buf (get-buffer-create buf-name)))
+        ;; Set the mode BEFORE attaching the process.  `make-comint-in-buffer'
+        ;; sees `derived-mode-p' is t and skips its own `comint-mode' setup,
+        ;; which avoids a race where `kill-all-local-variables' blanks
+        ;; `comint-last-output-start' while UCM is already emitting output —
+        ;; an `:after' advice on `comint-output-filter' (e.g. Doom's
+        ;; `doom--comint-enable-undo-a') would then crash on the nil marker.
         (with-current-buffer buf
           (unison-ts-inferior-ucm-mode))
+        (make-comint-in-buffer "ucm" buf unison-ts-ucm-executable nil)
         (setq unison-ts--ucm-process (get-buffer-process buf))
         (when unison-ts--ucm-process
           (set-process-query-on-exit-flag unison-ts--ucm-process nil))

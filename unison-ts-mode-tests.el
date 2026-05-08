@@ -1430,6 +1430,30 @@ TUI inside Emacs."
           (should-not (buffer-live-p buf)))
       (when (buffer-live-p buf) (kill-buffer buf)))))
 
+(ert-deftest unison-ts-inferior/mode-set-before-process-attach ()
+  "Mode must be active before `make-comint-in-buffer' starts the process.
+This avoids a race where `define-derived-mode' \\='s
+`kill-all-local-variables' blanks `comint-last-output-start' while
+UCM is already emitting output, which crashes any `:after' advice
+on `comint-output-filter' that reads the marker (e.g. Doom's
+`doom--comint-enable-undo-a').  Regression test for the
+`Wrong type argument: number-or-marker-p, nil' bug."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((mode-at-attach nil)
+        (unison-ts-ucm-executable "true")
+        (unison-ts-lsp-port 1)
+        (unison-ts-inferior-ucm-buffer-name "*ucm-test-order*"))
+    (cl-letf (((symbol-function 'make-comint-in-buffer)
+               (lambda (_name buffer _program _startfile &rest _switches)
+                 (let ((buf (if (bufferp buffer) buffer (get-buffer-create buffer))))
+                   (with-current-buffer buf
+                     (setq mode-at-attach major-mode))
+                   buf)))
+              ((symbol-function 'sit-for) (lambda (&rest _) t)))
+      (condition-case _ (unison-ts--start-ucm-inferior) (error nil)))
+    (should (provided-mode-derived-p mode-at-attach 'unison-ts-inferior-ucm-mode))))
+
 (ert-deftest unison-ts-inferior/start-failure-clears-state ()
   "When UCM never opens the LSP port, cleanup runs and the var clears."
   (require 'unison-ts-repl)
