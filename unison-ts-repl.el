@@ -480,27 +480,27 @@ Examples:
      ((string-match-p "^help\\s-*$" trimmed)
       (cons 'help nil))
      ;; Watch/evaluate: starts with >
-     ((string-match "^>\\s-*\\(.*\\)" trimmed)
+     ((string-match "^>\\s-*\\(\\(?:.\\|\n\\)*\\)" trimmed)
       (cons 'watch (match-string 1 trimmed)))
-     ;; Add definitions
-     ((string-match "^add\\s-+\\(.*\\)" trimmed)
+     ;; Add definitions (may span multiple lines)
+     ((string-match "^add\\s-+\\(\\(?:.\\|\n\\)*\\)" trimmed)
       (cons 'add (match-string 1 trimmed)))
      ;; Test
-     ((string-match "^test\\(?:\\s-+\\(.*\\)\\)?$" trimmed)
+     ((string-match "^test\\(?:\\s-+\\(\\(?:.\\|\n\\)*\\)\\)?$" trimmed)
       (cons 'test (match-string 1 trimmed)))
      ;; Run
-     ((string-match "^run\\s-+\\(\\S-+\\)\\(?:\\s-+\\(.*\\)\\)?$" trimmed)
+     ((string-match "^run\\s-+\\(\\S-+\\)\\(?:\\s-+\\(\\(?:.\\|\n\\)*\\)\\)?$" trimmed)
       (cons 'run (cons (match-string 1 trimmed)
                        (when (match-string 2 trimmed)
                          (split-string (match-string 2 trimmed))))))
      ;; View
-     ((string-match "^view\\s-+\\(.*\\)" trimmed)
+     ((string-match "^view\\s-+\\(\\(?:.\\|\n\\)*\\)" trimmed)
       (cons 'view (split-string (match-string 1 trimmed))))
      ;; Find by type (find : <type>)
-     ((string-match "^find\\s-*:\\s-*\\(.*\\)" trimmed)
+     ((string-match "^find\\s-*:\\s-*\\(\\(?:.\\|\n\\)*\\)" trimmed)
       (cons 'find-type (match-string 1 trimmed)))
      ;; Find by name
-     ((string-match "^find\\s-+\\(.*\\)" trimmed)
+     ((string-match "^find\\s-+\\(\\(?:.\\|\n\\)*\\)" trimmed)
       (cons 'find-name (match-string 1 trimmed)))
      ;; Docs
      ((string-match "^docs\\s-+\\(\\S-+\\)" trimmed)
@@ -846,22 +846,30 @@ PROC is the process.  Auto-close buffer on success after
                             (delete-windows-on buf)
                             (kill-buffer buf))))))))
 
-(defun unison-ts--send-to-repl (command)
+(defun unison-ts--send-to-repl--impl (command select)
   "Send COMMAND to the UCM REPL, starting it if needed.
-Works with both subprocess-based and MCP-based REPLs."
+If SELECT is non-nil, use `pop-to-buffer' to switch to the REPL;
+otherwise use `display-buffer'."
+  (unison-ts--ensure-ucm)
   (let ((buf (or (unison-ts-repl--get-buffer)
                  (unison-ts-repl--start))))
     (with-current-buffer buf
       (if (derived-mode-p 'unison-ts-mcp-repl-mode)
-          ;; MCP REPL - insert command and send
           (progn
             (goto-char (point-max))
             (insert command)
             (unison-ts-mcp-repl-send))
-        ;; Comint REPL - send to process
         (goto-char (point-max))
         (comint-send-string (get-buffer-process buf) (concat command "\n"))))
-    (display-buffer buf)))
+    (funcall (if select #'pop-to-buffer #'display-buffer) buf)))
+
+(defun unison-ts--send-to-repl (command)
+  "Send COMMAND to the UCM REPL, starting it if needed."
+  (unison-ts--send-to-repl--impl command nil))
+
+(defun unison-ts--send-to-repl-and-go (command)
+  "Send COMMAND to the UCM REPL and switch to it."
+  (unison-ts--send-to-repl--impl command t))
 
 (defun unison-ts--parse-mcp-output (text)
   "Parse MCP output TEXT which may be JSON-encoded UCM response."
@@ -1064,19 +1072,52 @@ For pure expressions, use `unison-ts-eval' instead."
   (member (treesit-node-type node)
           '("term_declaration" "type_declaration" "ability_declaration")))
 
-;;;###autoload
-(defun unison-ts-send-definition ()
-  "Send the definition at point to UCM via MCP."
-  (interactive)
+(defun unison-ts--definition-at-point ()
+  "Return the source text of the definition at point.
+Signals `user-error' if point is not on a definition node."
   (let ((node (treesit-node-at (point))))
     (unless node
       (user-error "No tree-sitter node at point"))
     (let ((def-node (treesit-parent-until node #'unison-ts--definition-node-p t)))
       (unless def-node
         (user-error "Point is not within a definition"))
-      (let* ((code (treesit-node-text def-node t))
-             (result (unison-ts-mcp--update-definitions code)))
-        (unison-ts--display-mcp-result result "eval")))))
+      (treesit-node-text def-node t))))
+
+;;;###autoload
+(defun unison-ts-send-definition ()
+  "Send the definition at point to UCM via MCP."
+  (interactive)
+  (let* ((code (unison-ts--definition-at-point))
+         (result (unison-ts-mcp--update-definitions code)))
+    (unison-ts--display-mcp-result result "eval")))
+
+;;;###autoload
+(defun unison-ts-eval-and-go (expr)
+  "Evaluate EXPR via the UCM MCP REPL and switch to the REPL buffer.
+Inserts \"> EXPR\" as a typed-prompt entry and switches to the REPL,
+mirroring `unison-ts-eval' but routing output through the REPL buffer
+instead of the minibuffer or a separate output buffer."
+  (interactive "sExpression: ")
+  (unison-ts--send-to-repl-and-go (concat "> " expr)))
+
+;;;###autoload
+(defun unison-ts-send-region-and-go (start end)
+  "Send the region between START and END to the UCM MCP REPL and switch to it.
+Inserts \"add <region>\" as a typed-prompt entry and switches to the
+REPL buffer, mirroring `unison-ts-send-region'."
+  (interactive "r")
+  (unless (use-region-p)
+    (user-error "No region active"))
+  (let ((code (buffer-substring-no-properties start end)))
+    (unison-ts--send-to-repl-and-go (concat "add " code))))
+
+;;;###autoload
+(defun unison-ts-send-definition-and-go ()
+  "Send the definition at point to the UCM MCP REPL and switch to it.
+Inserts \"add <definition>\" as a typed-prompt entry and switches to
+the REPL buffer, mirroring `unison-ts-send-definition'."
+  (interactive)
+  (unison-ts--send-to-repl-and-go (concat "add " (unison-ts--definition-at-point))))
 
 (provide 'unison-ts-repl)
 
