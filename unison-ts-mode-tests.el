@@ -1446,6 +1446,26 @@ TUI inside Emacs."
       (when (process-live-p proc)
         (delete-process proc)))))
 
+(ert-deftest unison-ts-inferior/start-errors-when-process-not-attached ()
+  "If `make-comint-in-buffer' does not attach a process, error out and
+do not leak the buffer.  Regression test for the partial-spawn path."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((unison-ts-ucm-executable "true")
+        (unison-ts-lsp-port 1)
+        (unison-ts-inferior-ucm-buffer-name "*ucm-test-no-proc*")
+        (unison-ts--ucm-process nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'make-comint-in-buffer)
+                   (lambda (_name _buffer _program _startfile &rest _switches)
+                     ;; Return a buffer with no attached process.
+                     (get-buffer-create unison-ts-inferior-ucm-buffer-name))))
+          (should-error (unison-ts--start-ucm-inferior) :type 'error)
+          (should (null unison-ts--ucm-process))
+          (should-not (get-buffer unison-ts-inferior-ucm-buffer-name)))
+      (when-let ((b (get-buffer unison-ts-inferior-ucm-buffer-name)))
+        (kill-buffer b)))))
+
 (ert-deftest unison-ts-inferior/cleanup-kills-buffer ()
   "Cleanup also kills the inferior UCM buffer (avoids stale buffer)."
   (require 'unison-ts-repl)
