@@ -87,24 +87,24 @@ If CALLBACK is nil, runs synchronously and returns responses."
          (input (mapconcat #'json-encode all-requests "\n")))
     (if callback
         ;; Async mode
-        (let ((output-buffer (generate-new-buffer " *ucm-mcp-output*")))
-          (make-process
-           :name "ucm-mcp"
-           :buffer output-buffer
-           :command (list unison-ts-ucm-executable "mcp")
-           :connection-type 'pipe
-           :sentinel (lambda (proc _event)
-                       (when (memq (process-status proc) '(exit signal))
-                         (let ((responses (unison-ts-mcp--parse-output output-buffer)))
-                           (kill-buffer output-buffer)
-                           (funcall callback responses))))
-           :filter (lambda (proc string)
-                     (with-current-buffer (process-buffer proc)
-                       (goto-char (point-max))
-                       (insert string))))
-          (process-send-string "ucm-mcp" input)
-          (process-send-string "ucm-mcp" "\n")
-          (process-send-eof "ucm-mcp")
+        (let* ((output-buffer (generate-new-buffer " *ucm-mcp-output*"))
+               (proc (make-process
+                      :name "ucm-mcp"
+                      :buffer output-buffer
+                      :command (list unison-ts-ucm-executable "mcp")
+                      :connection-type 'pipe
+                      :sentinel (lambda (proc _event)
+                                  (when (memq (process-status proc) '(exit signal))
+                                    (let ((responses (unison-ts-mcp--parse-output output-buffer)))
+                                      (kill-buffer output-buffer)
+                                      (funcall callback responses))))
+                      :filter (lambda (proc string)
+                                (with-current-buffer (process-buffer proc)
+                                  (goto-char (point-max))
+                                  (insert string))))))
+          (process-send-string proc input)
+          (process-send-string proc "\n")
+          (process-send-eof proc)
           nil)
       ;; Sync mode (for REPL)
       (let ((output (with-temp-buffer
