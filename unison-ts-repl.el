@@ -47,6 +47,54 @@ Set to nil to disable auto-close."
                  (const :tag "Disable" nil))
   :group 'unison-ts-repl)
 
+(defcustom unison-ts-eval-overlay t
+  "When non-nil, display eval results as transient inline overlays.
+When nil, all overlay logic is a no-op and behavior matches the pre-overlay
+default (minibuffer only)."
+  :type 'boolean
+  :group 'unison-ts-repl)
+
+(defcustom unison-ts-eval-overlay-format " => %s"
+  "Format string for inline eval result overlays.
+%s is replaced with the result string."
+  :type 'string
+  :group 'unison-ts-repl)
+
+(defface unison-ts-eval-overlay-face
+  '((t :inherit font-lock-comment-face))
+  "Face used for inline eval result overlays."
+  :group 'unison-ts-repl)
+
+(defvar-local unison-ts--eval-overlay nil
+  "Current eval result overlay in this buffer, or nil.")
+
+(defun unison-ts--overlay-clear ()
+  "Delete the current eval overlay and remove the pre-command hook."
+  (when (overlayp unison-ts--eval-overlay)
+    (delete-overlay unison-ts--eval-overlay))
+  (setq unison-ts--eval-overlay nil)
+  (remove-hook 'pre-command-hook #'unison-ts--overlay-clear t))
+
+(defconst unison-ts--overlay-max-length 120
+  "Maximum character length for inline eval result overlays.
+Results longer than this are not shown as overlays.")
+
+(defun unison-ts--overlay-show (position result-string)
+  "Display RESULT-STRING as a transient overlay at POSITION.
+POSITION is a buffer position (integer or marker).
+Does nothing when `unison-ts-eval-overlay' is nil, when RESULT-STRING
+contains a newline, or when it exceeds `unison-ts--overlay-max-length'."
+  (when (and unison-ts-eval-overlay
+             (not (string-match-p "\n" result-string))
+             (<= (length result-string) unison-ts--overlay-max-length))
+    (unison-ts--overlay-clear)
+    (let* ((text (format unison-ts-eval-overlay-format result-string))
+           (overlay (make-overlay position position nil t t)))
+      (overlay-put overlay 'after-string
+                   (propertize text 'face 'unison-ts-eval-overlay-face))
+      (setq unison-ts--eval-overlay overlay)
+      (add-hook 'pre-command-hook #'unison-ts--overlay-clear nil t))))
+
 (defconst unison-ts--lsp-startup-max-attempts 100
   "Maximum attempts to wait for LSP server startup (0.1s each = 10s total).")
 
@@ -893,40 +941,44 @@ otherwise use `display-buffer'."
           (push msg result))))
     (nreverse result)))
 
-(defun unison-ts--display-mcp-result (result title)
+(defun unison-ts--display-mcp-result (result title at)
   "Display MCP RESULT appropriately based on content.
-Short success messages go to minibuffer, errors/long output to a buffer."
-  (if (and result (listp result))
-      (let* ((content-array (alist-get 'content result))
-             (content (if (vectorp content-array)
-                          (aref content-array 0)
-                        (car content-array)))
-             (text (alist-get 'text content))
-             (parsed (when text (unison-ts--parse-mcp-output text))))
-        (if (and (listp parsed) (not (stringp parsed)))
-            (let* ((errors (unison-ts--dedupe-messages (alist-get 'errorMessages parsed)))
-                   (error-keys (mapcar #'string-trim errors))
-                   (outputs (seq-filter
-                             (lambda (msg)
-                               (and (not (string-match-p "^Loading changes" msg))
-                                    (not (string-match-p "^No changes found" msg))
-                                    ;; Filter misleading "Run `update`" - MCP already commits
-                                    (not (string-match-p "Run `update` to apply" msg))
-                                    (not (member (string-trim msg) error-keys))))
-                             (unison-ts--dedupe-messages (alist-get 'outputMessages parsed)))))
-              (if (= (length errors) 0)
-                  ;; Success → minibuffer with helpful message
-                  (let ((output-str (string-join outputs " ")))
-                    (if (string-match-p "^\\+" output-str)
-                        ;; Definitions were added - show what was added
-                        (message "UCM: Added definitions. %s" output-str)
-                      (message "UCM: %s" output-str)))
-                ;; Errors → buffer
-                (unison-ts--display-in-buffer title errors outputs)))
-          ;; Non-parsed output → buffer
-          (unison-ts--display-in-buffer title nil (list (format "%s" parsed)))))
-    ;; Fallback → buffer
-    (unison-ts--display-in-buffer title nil (list (format "%S" result)))))
+Short success messages go to minibuffer, errors/long output to a buffer.
+AT is a buffer position; when the result is a success, an inline overlay
+is shown at that position in addition to the minibuffer message."
+  (let ((overlay-position at))
+    (if (and result (listp result))
+        (let* ((content-array (alist-get 'content result))
+               (content (if (vectorp content-array)
+                            (aref content-array 0)
+                          (car content-array)))
+               (text (alist-get 'text content))
+               (parsed (when text (unison-ts--parse-mcp-output text))))
+          (if (and (listp parsed) (not (stringp parsed)))
+              (let* ((errors (unison-ts--dedupe-messages (alist-get 'errorMessages parsed)))
+                     (error-keys (mapcar #'string-trim errors))
+                     (outputs (seq-filter
+                               (lambda (msg)
+                                 (and (not (string-match-p "^Loading changes" msg))
+                                      (not (string-match-p "^No changes found" msg))
+                                      ;; Filter misleading "Run `update`" - MCP already commits
+                                      (not (string-match-p "Run `update` to apply" msg))
+                                      (not (member (string-trim msg) error-keys))))
+                               (unison-ts--dedupe-messages (alist-get 'outputMessages parsed)))))
+                (if (= (length errors) 0)
+                    ;; Success → minibuffer + optional overlay
+                    (let ((output-str (string-join outputs " ")))
+                      (if (string-match-p "^\\+" output-str)
+                          ;; Definitions were added - show what was added
+                          (message "UCM: Added definitions. %s" output-str)
+                        (message "UCM: %s" output-str))
+                      (unison-ts--overlay-show overlay-position output-str))
+                  ;; Errors → buffer
+                  (unison-ts--display-in-buffer title errors outputs)))
+            ;; Non-parsed output → buffer
+            (unison-ts--display-in-buffer title nil (list (format "%s" parsed)))))
+      ;; Fallback → buffer
+      (unison-ts--display-in-buffer title nil (list (format "%S" result))))))
 
 (defun unison-ts--display-in-buffer (title errors outputs)
   "Display ERRORS and OUTPUTS in a *UCM: TITLE* buffer.
@@ -956,7 +1008,8 @@ Displays result with TITLE when complete."
   (unless buffer-file-name
     (user-error "Buffer is not visiting a file"))
   (let ((code (buffer-substring-no-properties (point-min) (point-max)))
-        (ctx (unison-ts-mcp--get-project-context)))
+        (ctx (unison-ts-mcp--get-project-context))
+        (position (point)))
     (unless ctx
       (user-error "No Unison project context found. Open a project first"))
     (let ((project-name (alist-get 'projectName ctx))
@@ -966,7 +1019,7 @@ Displays result with TITLE when complete."
        (append (unison-ts-mcp--make-project-context project-name branch-name)
                `((code . ((text . ,code)))))
        (lambda (result)
-         (unison-ts--display-mcp-result result title))))))
+         (unison-ts--display-mcp-result result title position))))))
 
 ;;;###autoload
 (defun unison-ts-add ()
@@ -984,7 +1037,8 @@ Displays result with TITLE when complete."
 (defun unison-ts-test ()
   "Run tests in the current project via MCP."
   (interactive)
-  (let ((ctx (unison-ts-mcp--get-project-context)))
+  (let ((ctx (unison-ts-mcp--get-project-context))
+        (position (point)))
     (unless ctx
       (user-error "No Unison project context found. Open a project first"))
     (unison-ts-mcp--call-tool
@@ -993,7 +1047,7 @@ Displays result with TITLE when complete."
       (alist-get 'projectName ctx)
       (alist-get 'branchName ctx))
      (lambda (result)
-       (unison-ts--display-mcp-result result "test")))))
+       (unison-ts--display-mcp-result result "test" position)))))
 
 ;;;###autoload
 (defun unison-ts-eval (expr)
@@ -1001,7 +1055,8 @@ Displays result with TITLE when complete."
 EXPR is evaluated using the typecheck-code tool with > prefix.
 Works for both pure functions and IO actions."
   (interactive "sExpression: ")
-  (let ((ctx (unison-ts-mcp--get-project-context)))
+  (let ((ctx (unison-ts-mcp--get-project-context))
+        (position (point)))
     (unless ctx
       (user-error "No Unison project context found. Open a project first"))
     (unison-ts-mcp--call-tool
@@ -1011,7 +1066,7 @@ Works for both pure functions and IO actions."
               (alist-get 'branchName ctx))
              `((code . ((sourceCode . ,(concat "> " expr))))))
      (lambda (result)
-       (unison-ts--display-mcp-result result "eval")))))
+       (unison-ts--display-mcp-result result "eval" position)))))
 
 ;;;###autoload
 (defun unison-ts-run ()
@@ -1019,7 +1074,8 @@ Works for both pure functions and IO actions."
 For pure expressions, use `unison-ts-eval' instead."
   (interactive)
   (let ((term (read-string "IO action to run: "))
-        (ctx (unison-ts-mcp--get-project-context)))
+        (ctx (unison-ts-mcp--get-project-context))
+        (position (point)))
     (unless ctx
       (user-error "No Unison project context found. Open a project first"))
     (unison-ts-mcp--call-tool
@@ -1030,7 +1086,7 @@ For pure expressions, use `unison-ts-eval' instead."
              `((mainFunctionName . ,term)
                (args . [])))
      (lambda (result)
-       (unison-ts--display-mcp-result result "run")))))
+       (unison-ts--display-mcp-result result "run" position)))))
 
 ;;;###autoload
 (defun unison-ts-watch ()
@@ -1039,7 +1095,8 @@ For pure expressions, use `unison-ts-eval' instead."
   (unless buffer-file-name
     (user-error "Buffer is not visiting a file"))
   (let ((code (buffer-substring-no-properties (point-min) (point-max)))
-        (ctx (unison-ts-mcp--get-project-context)))
+        (ctx (unison-ts-mcp--get-project-context))
+        (position (point)))
     (unless ctx
       (user-error "No Unison project context found. Open a project first"))
     (unison-ts-mcp--call-tool
@@ -1049,7 +1106,7 @@ For pure expressions, use `unison-ts-eval' instead."
               (alist-get 'branchName ctx))
              `((code . ((sourceCode . ,code)))))
      (lambda (result)
-       (unison-ts--display-mcp-result result "watch")))))
+       (unison-ts--display-mcp-result result "watch" position)))))
 
 ;;;###autoload
 (defun unison-ts-load ()
@@ -1065,7 +1122,7 @@ For pure expressions, use `unison-ts-eval' instead."
     (user-error "No region active"))
   (let* ((code (buffer-substring-no-properties start end))
          (result (unison-ts-mcp--update-definitions code)))
-    (unison-ts--display-mcp-result result "eval")))
+    (unison-ts--display-mcp-result result "eval" end)))
 
 (defun unison-ts--definition-node-p (node)
   "Return non-nil if NODE is a Unison definition."
@@ -1081,15 +1138,18 @@ Signals `user-error' if point is not on a definition node."
     (let ((def-node (treesit-parent-until node #'unison-ts--definition-node-p t)))
       (unless def-node
         (user-error "Point is not within a definition"))
-      (treesit-node-text def-node t))))
+      (cons (treesit-node-text def-node t)
+            (treesit-node-end def-node)))))
 
 ;;;###autoload
 (defun unison-ts-send-definition ()
   "Send the definition at point to UCM via MCP."
   (interactive)
-  (let* ((code (unison-ts--definition-at-point))
+  (let* ((info (unison-ts--definition-at-point))
+         (code (car info))
+         (end (cdr info))
          (result (unison-ts-mcp--update-definitions code)))
-    (unison-ts--display-mcp-result result "eval")))
+    (unison-ts--display-mcp-result result "eval" end)))
 
 ;;;###autoload
 (defun unison-ts-eval-and-go (expr)
@@ -1117,7 +1177,8 @@ REPL buffer, mirroring `unison-ts-send-region'."
 Inserts \"add <definition>\" as a typed-prompt entry and switches to
 the REPL buffer, mirroring `unison-ts-send-definition'."
   (interactive)
-  (unison-ts--send-to-repl-and-go (concat "add " (unison-ts--definition-at-point))))
+  (unison-ts--send-to-repl-and-go
+   (concat "add " (car (unison-ts--definition-at-point)))))
 
 (provide 'unison-ts-repl)
 
