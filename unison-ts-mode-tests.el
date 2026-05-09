@@ -1265,10 +1265,22 @@
 ;;; REPL integration tests
 
 (ert-deftest unison-ts-repl/project-root-fallback ()
-  "Project root should fall back to default-directory."
+  "Project root should fall back to default-directory when no project is found."
   (require 'unison-ts-repl)
-  (let ((default-directory "/tmp/"))
-    (should (equal (unison-ts-project-root) "/tmp/"))))
+  (cl-letf (((symbol-function 'project-current) (lambda (&rest _) nil)))
+    (let ((default-directory "/tmp/"))
+      (should (equal (unison-ts-project-root) "/tmp/")))))
+
+(ert-deftest unison-ts-repl/project-root-prefers-project-current ()
+  "Project root should return project-root when project-current succeeds."
+  (require 'unison-ts-repl)
+  (cl-letf (((symbol-function 'project-current)
+             (lambda (&rest _)
+               (cons 'transient "/tmp/some-proj/")))
+            ((symbol-function 'project-root)
+             (lambda (_proj) "/tmp/some-proj/")))
+    (let ((default-directory "/tmp/some-proj/src/"))
+      (should (equal (unison-ts-project-root) "/tmp/some-proj/")))))
 
 (ert-deftest unison-ts-repl/project-name ()
   "Project name should be directory name."
