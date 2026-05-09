@@ -1553,32 +1553,28 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
               'unison-ts-send-definition-and-go)))
 
 (ert-deftest unison-ts-and-go/eval-routes-to-watch ()
-  "`unison-ts-eval-and-go' must call `unison-ts-mcp-repl--execute-async'
-with command 'watch and the expression as args."
+  "`unison-ts-eval-and-go' synthesises a \"> expr\" command that the parser
+routes to the 'watch command."
   (require 'unison-ts-repl)
-  (require 'cl-lib)
-  (let ((captured-command nil)
-        (captured-args nil)
-        (repl-buf (get-buffer-create "*ucm-test-and-go*")))
-    (unwind-protect
-        (progn
-          (with-current-buffer repl-buf
-            (unison-ts-mcp-repl-mode)
-            (setq unison-ts-mcp-repl--project-root default-directory)
-            (unison-ts-mcp-repl--insert-prompt))
-          ;; Stub the REPL buffer lookup so we get our test buffer.
-          (cl-letf (((symbol-function 'unison-ts-repl--get-buffer)
-                     (lambda () repl-buf))
-                    ((symbol-function 'pop-to-buffer)
-                     (lambda (_buf) nil))
-                    ((symbol-function 'unison-ts-mcp-repl--execute-async)
-                     (lambda (cmd args _cb)
-                       (setq captured-command cmd)
-                       (setq captured-args args))))
-            (unison-ts-eval-and-go "1 + 2"))
-          (should (eq captured-command 'watch))
-          (should (equal captured-args "1 + 2")))
-      (when (buffer-live-p repl-buf) (kill-buffer repl-buf)))))
+  (let ((parsed (unison-ts-mcp-repl--parse-command "> 1 + 2")))
+    (should (eq (car parsed) 'watch))
+    (should (equal (cdr parsed) "1 + 2"))))
+
+(ert-deftest unison-ts-and-go/send-region-routes-to-add ()
+  "`unison-ts-send-region-and-go' synthesises an \"add <code>\" command that
+the parser routes to the 'add command."
+  (require 'unison-ts-repl)
+  (let ((parsed (unison-ts-mcp-repl--parse-command "add foo x = x + 1")))
+    (should (eq (car parsed) 'add))
+    (should (equal (cdr parsed) "foo x = x + 1"))))
+
+(ert-deftest unison-ts-and-go/multiline-add-parses-cleanly ()
+  "Multi-line add input must not be truncated at the first newline."
+  (require 'unison-ts-repl)
+  (let* ((input "add foo = 1\nbar = 2")
+         (parsed (unison-ts-mcp-repl--parse-command input)))
+    (should (eq (car parsed) 'add))
+    (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
