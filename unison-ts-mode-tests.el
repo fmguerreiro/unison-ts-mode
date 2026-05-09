@@ -1265,16 +1265,34 @@
 ;;; REPL integration tests
 
 (ert-deftest unison-ts-repl/project-root-fallback ()
-  "Project root should fall back to default-directory."
+  "Project root falls back to `default-directory' when no project."
   (require 'unison-ts-repl)
-  (let ((default-directory "/tmp/"))
-    (should (equal (unison-ts-project-root) "/tmp/"))))
+  (require 'cl-lib)
+  (cl-letf (((symbol-function 'project-current) (lambda (&rest _) nil)))
+    (let ((default-directory "/tmp/"))
+      (should (equal (unison-ts-project-root) "/tmp/")))))
+
+(ert-deftest unison-ts-repl/project-root-prefers-project-current ()
+  "Project root uses `project-current' when available (gh#13).
+Walking up to find `.unison' is wrong: UCM stores its global codebase
+at `~/.unison/' so the walk always terminates at home."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((fake-proj (cons 'fake-project "/some/proj-root/")))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&rest _) fake-proj))
+              ((symbol-function 'project-root)
+               (lambda (proj) (cdr proj))))
+      (let ((default-directory "/some/proj-root/sub/"))
+        (should (equal (unison-ts-project-root) "/some/proj-root/"))))))
 
 (ert-deftest unison-ts-repl/project-name ()
-  "Project name should be directory name."
+  "Project name is the trailing directory of the project root."
   (require 'unison-ts-repl)
-  (let ((default-directory "/tmp/my-project/"))
-    (should (equal (unison-ts-project-name) "my-project"))))
+  (require 'cl-lib)
+  (cl-letf (((symbol-function 'project-current) (lambda (&rest _) nil)))
+    (let ((default-directory "/tmp/my-project/"))
+      (should (equal (unison-ts-project-name) "my-project")))))
 
 (ert-deftest unison-ts-repl/buffer-name-format ()
   "REPL buffer name should include project name."

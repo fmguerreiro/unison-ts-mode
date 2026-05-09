@@ -246,10 +246,9 @@ Uses the UNISON_LSP_PORT env var when set, falling back to the
   (unison-ts-api--port-open-p (unison-ts--resolve-lsp-port)))
 
 (defun unison-ts-project-root ()
-  "Find Unison project root by looking for .unison directory.
-Falls back to `project-root' or `default-directory'."
-  (or (locate-dominating-file default-directory ".unison")
-      (when-let ((proj (project-current)))
+  "Find the project root for the current buffer.
+Prefers `project-current'; falls back to `default-directory'."
+  (or (when-let ((proj (project-current)))
         (project-root proj))
       default-directory))
 
