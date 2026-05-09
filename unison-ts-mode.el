@@ -54,6 +54,9 @@
 ;;   C-c C-u l - Load current file
 ;;   C-c C-u e - Send region to REPL
 ;;   C-c C-u d - Send definition at point to REPL
+;;   C-c C-u V - Eval expression and go to REPL
+;;   C-c C-u E - Send region to REPL and go
+;;   C-c C-u D - Send definition to REPL and go
 ;;
 ;; Forked from https://github.com/dariooddenino/unison-ts-mode-emacs.
 
@@ -137,6 +140,9 @@ See `treesit-simple-imenu-settings' for details.")
     (define-key map (kbd "C-c C-u l") #'unison-ts-load)
     (define-key map (kbd "C-c C-u e") #'unison-ts-send-region)
     (define-key map (kbd "C-c C-u d") #'unison-ts-send-definition)
+    (define-key map (kbd "C-c C-u V") #'unison-ts-eval-and-go)
+    (define-key map (kbd "C-c C-u E") #'unison-ts-send-region-and-go)
+    (define-key map (kbd "C-c C-u D") #'unison-ts-send-definition-and-go)
     map)
   "Keymap for `unison-ts-mode'.")
 

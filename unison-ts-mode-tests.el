@@ -1649,5 +1649,51 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
       (unison-ts--overlay-show 1 "line one\nline two")
       (should-not (overlays-in 1 1)))))
 
+;;; -and-go command tests (gh#15)
+
+(ert-deftest unison-ts-and-go/commands-are-interactive ()
+  "All -and-go commands must be autoloaded interactive commands."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-eval-and-go))
+  (should (commandp 'unison-ts-eval-and-go))
+  (should (fboundp 'unison-ts-send-region-and-go))
+  (should (commandp 'unison-ts-send-region-and-go))
+  (should (fboundp 'unison-ts-send-definition-and-go))
+  (should (commandp 'unison-ts-send-definition-and-go)))
+
+(ert-deftest unison-ts-and-go/keybindings ()
+  "Uppercase V/E/D must be bound to the -and-go variants."
+  (require 'unison-ts-mode)
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u V"))
+              'unison-ts-eval-and-go))
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u E"))
+              'unison-ts-send-region-and-go))
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u D"))
+              'unison-ts-send-definition-and-go)))
+
+(ert-deftest unison-ts-and-go/eval-routes-to-watch ()
+  "`unison-ts-eval-and-go' synthesises a \"> expr\" command that the parser
+routes to the 'watch command."
+  (require 'unison-ts-repl)
+  (let ((parsed (unison-ts-mcp-repl--parse-command "> 1 + 2")))
+    (should (eq (car parsed) 'watch))
+    (should (equal (cdr parsed) "1 + 2"))))
+
+(ert-deftest unison-ts-and-go/send-region-routes-to-add ()
+  "`unison-ts-send-region-and-go' synthesises an \"add <code>\" command that
+the parser routes to the 'add command."
+  (require 'unison-ts-repl)
+  (let ((parsed (unison-ts-mcp-repl--parse-command "add foo x = x + 1")))
+    (should (eq (car parsed) 'add))
+    (should (equal (cdr parsed) "foo x = x + 1"))))
+
+(ert-deftest unison-ts-and-go/multiline-add-parses-cleanly ()
+  "Multi-line add input must not be truncated at the first newline."
+  (require 'unison-ts-repl)
+  (let* ((input "add foo = 1\nbar = 2")
+         (parsed (unison-ts-mcp-repl--parse-command input)))
+    (should (eq (car parsed) 'add))
+    (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
