@@ -1130,8 +1130,10 @@ For pure expressions, use `unison-ts-eval' instead."
           '("term_declaration" "type_declaration" "ability_declaration")))
 
 (defun unison-ts--definition-at-point ()
-  "Return the source text of the definition at point.
-Signals `user-error' if point is not on a definition node."
+  "Return (CODE . END) for the definition at point.
+CODE is the source text of the enclosing definition node.  END is
+the buffer position after the node, suitable for anchoring result
+overlays.  Signals `user-error' if point is not on a definition."
   (let ((node (treesit-node-at (point))))
     (unless node
       (user-error "No tree-sitter node at point"))
