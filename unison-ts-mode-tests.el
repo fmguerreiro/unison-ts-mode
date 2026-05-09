@@ -1350,6 +1350,31 @@
   (require 'unison-ts-repl)
   (should (fboundp 'unison-ts-mcp--run)))
 
+(ert-deftest unison-ts-mcp/async-uses-process-object-not-name ()
+  "`unison-ts-mcp--call' must send to the process object returned
+by `make-process', not look it up by the name string \"ucm-mcp\".
+
+Looking up by name hits a stale finished process when emacs has
+auto-uniquified the new process to `ucm-mcp<2>'.  Capturing the
+object is the regression-proof fix (gh#11)."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((fake-proc (start-process "test-mcp-fake" nil "true"))
+        (send-targets nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'make-process)
+                   (lambda (&rest _) fake-proc))
+                  ((symbol-function 'process-send-string)
+                   (lambda (target _string) (push target send-targets)))
+                  ((symbol-function 'process-send-eof)
+                   (lambda (target) (push target send-targets))))
+          (unison-ts-mcp--call '(("noop" . nil)) (lambda (_r) nil)))
+      (when (process-live-p fake-proc) (delete-process fake-proc)))
+    (should send-targets)
+    (dolist (target send-targets)
+      (should (eq target fake-proc))
+      (should-not (stringp target)))))
+
 ;;; Inferior UCM (gh#8) — full UCM in a comint buffer, no separate `ucm headless'
 
 (ert-deftest unison-ts-inferior/mode-defined ()
