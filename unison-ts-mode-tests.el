@@ -1530,5 +1530,101 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
     (should (null unison-ts--ucm-process))
     (should-not (get-buffer unison-ts-inferior-ucm-buffer-name))))
 
+;;; Inline eval overlay (gh#16)
+
+(ert-deftest unison-ts-overlay/defcustom-exists ()
+  "unison-ts-eval-overlay defcustom must exist, default to t, and be boolean."
+  (require 'unison-ts-repl)
+  (should (boundp 'unison-ts-eval-overlay))
+  (should (eq unison-ts-eval-overlay t))
+  (should (eq (get 'unison-ts-eval-overlay 'custom-type) 'boolean)))
+
+(ert-deftest unison-ts-overlay/format-defcustom-exists ()
+  "unison-ts-eval-overlay-format defcustom must exist and be a string."
+  (require 'unison-ts-repl)
+  (should (boundp 'unison-ts-eval-overlay-format))
+  (should (stringp unison-ts-eval-overlay-format))
+  (should (string-match-p "%s" unison-ts-eval-overlay-format)))
+
+(ert-deftest unison-ts-overlay/show-creates-overlay ()
+  "unison-ts--overlay-show must create an overlay with the formatted after-string."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "hello")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s"))
+      (unison-ts--overlay-show 5 "42")
+      (let ((overlays (overlays-in 5 5)))
+        (should (= (length overlays) 1))
+        (should (string-match-p "42" (overlay-get (car overlays) 'after-string)))))))
+
+(ert-deftest unison-ts-overlay/show-respects-format ()
+  "after-string must use unison-ts-eval-overlay-format."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "hello")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format ":: %s"))
+      (unison-ts--overlay-show 5 "Nat")
+      (let ((overlays (overlays-in 5 5)))
+        (should (= (length overlays) 1))
+        (should (equal (overlay-get (car overlays) 'after-string)
+                       (propertize ":: Nat" 'face 'unison-ts-eval-overlay-face)))))))
+
+(ert-deftest unison-ts-overlay/pre-command-clears-overlay ()
+  "pre-command-hook must delete the overlay and remove itself."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "hello")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s"))
+      (unison-ts--overlay-show 5 "99")
+      (should (overlays-in 5 5))
+      ;; Simulate a pre-command event by running the hook manually.
+      (run-hooks 'pre-command-hook)
+      (should-not (overlays-in 5 5))
+      (should-not (memq #'unison-ts--overlay-clear
+                        (buffer-local-value 'pre-command-hook (current-buffer)))))))
+
+(ert-deftest unison-ts-overlay/disabled-is-noop ()
+  "When unison-ts-eval-overlay is nil, unison-ts--overlay-show must not create an overlay."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "hello")
+    (let ((unison-ts-eval-overlay nil))
+      (unison-ts--overlay-show 5 "42")
+      (should-not (overlays-in 5 5)))))
+
+(ert-deftest unison-ts-overlay/display-mcp-result-success-calls-overlay ()
+  "Success path of unison-ts--display-mcp-result must invoke overlay show."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (with-temp-buffer
+    (insert "hello world")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s")
+          ;; Build a minimal success result identical to what MCP returns.
+          (result `((content . [((type . "text")
+                                 (text . "{\"errorMessages\":[],\"outputMessages\":[\"42\"]}"))]))))
+      (unison-ts--display-mcp-result result "eval" 5)
+      (let ((overlays (overlays-in 5 5)))
+        (should (= (length overlays) 1))
+        (should (string-match-p "42" (overlay-get (car overlays) 'after-string)))))))
+
+(ert-deftest unison-ts-overlay/display-mcp-result-error-no-overlay ()
+  "Error path of unison-ts--display-mcp-result must NOT create an overlay."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (with-temp-buffer
+    (insert "hello world")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s")
+          (result `((content . [((type . "text")
+                                 (text . "{\"errorMessages\":[\"type error\"],\"outputMessages\":[]}"))]))))
+      (cl-letf (((symbol-function 'pop-to-buffer) (lambda (&rest _) nil))
+                ((symbol-function 'display-buffer) (lambda (&rest _) nil)))
+        (unison-ts--display-mcp-result result "eval" 5))
+      (should-not (overlays-in 5 5)))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
