@@ -1350,5 +1350,142 @@
   (require 'unison-ts-repl)
   (should (fboundp 'unison-ts-mcp--run)))
 
+;;; Inferior UCM (gh#8) — full UCM in a comint buffer, no separate `ucm headless'
+
+(ert-deftest unison-ts-inferior/mode-defined ()
+  "Inferior UCM major mode should be defined and derive from comint-mode."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-inferior-ucm-mode))
+  (should (provided-mode-derived-p 'unison-ts-inferior-ucm-mode 'comint-mode)))
+
+(ert-deftest unison-ts-inferior/command-defined ()
+  "Interactive entry point should exist."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-inferior-ucm))
+  (should (commandp 'unison-ts-inferior-ucm)))
+
+(ert-deftest unison-ts-inferior/buffer-name-defcustom ()
+  "Buffer name should be a configurable string defcustom."
+  (require 'unison-ts-repl)
+  (should (boundp 'unison-ts-inferior-ucm-buffer-name))
+  (should (stringp unison-ts-inferior-ucm-buffer-name))
+  (should (eq (get 'unison-ts-inferior-ucm-buffer-name 'custom-type) 'string)))
+
+(ert-deftest unison-ts-inferior/keybinding ()
+  "C-c C-u i should invoke inferior UCM."
+  (require 'unison-ts-mode)
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u i"))
+              'unison-ts-inferior-ucm)))
+
+(ert-deftest unison-ts-inferior/spawns-full-ucm-not-headless ()
+  "Spawn function must invoke `ucm' without the `headless' sub-command (gh#8).
+
+`ucm headless' grabs the codebase lock and prevents the user from
+running `ucm' externally.  A full `ucm' invocation exposes the
+same LSP/MCP endpoints while letting the user interact with the
+TUI inside Emacs."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((captured-args nil)
+        (unison-ts-ucm-executable "true")
+        ;; Pick a port that the real `unison-ts-api--port-open-p' will
+        ;; report as closed, so we exercise the spawn branch for real.
+        (unison-ts-lsp-port 1))
+    (cl-letf (((symbol-function 'make-comint-in-buffer)
+               (lambda (name buffer program _startfile &rest switches)
+                 (setq captured-args (cons program switches))
+                 (get-buffer-create (if (stringp buffer)
+                                        buffer
+                                      (format "*%s*" name)))))
+              ((symbol-function 'sit-for) (lambda (&rest _) t)))
+      (condition-case _
+          (unison-ts--start-ucm-inferior)
+        (error nil)))
+    (should captured-args)
+    (should-not (member "headless" (cdr captured-args)))))
+
+(ert-deftest unison-ts-inferior/cleanup-on-emacs-exit ()
+  "Inferior UCM process is torn down on Emacs exit."
+  (require 'unison-ts-repl)
+  (should (memq 'unison-ts--cleanup-ucm kill-emacs-hook))
+  (let ((proc (start-process "test-ucm-fake" nil "sleep" "30")))
+    (unwind-protect
+        (let ((unison-ts--ucm-process proc))
+          (should (process-live-p proc))
+          (unison-ts--cleanup-ucm)
+          (should-not (process-live-p proc))
+          (should (null unison-ts--ucm-process)))
+      (when (process-live-p proc)
+        (delete-process proc)))))
+
+(ert-deftest unison-ts-inferior/start-errors-when-process-not-attached ()
+  "If `make-comint-in-buffer' does not attach a process, error out and
+do not leak the buffer.  Regression test for the partial-spawn path."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((unison-ts-ucm-executable "true")
+        (unison-ts-lsp-port 1)
+        (unison-ts-inferior-ucm-buffer-name "*ucm-test-no-proc*")
+        (unison-ts--ucm-process nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'make-comint-in-buffer)
+                   (lambda (_name _buffer _program _startfile &rest _switches)
+                     ;; Return a buffer with no attached process.
+                     (get-buffer-create unison-ts-inferior-ucm-buffer-name))))
+          (should-error (unison-ts--start-ucm-inferior) :type 'error)
+          (should (null unison-ts--ucm-process))
+          (should-not (get-buffer unison-ts-inferior-ucm-buffer-name)))
+      (when-let ((b (get-buffer unison-ts-inferior-ucm-buffer-name)))
+        (kill-buffer b)))))
+
+(ert-deftest unison-ts-inferior/cleanup-kills-buffer ()
+  "Cleanup also kills the inferior UCM buffer (avoids stale buffer)."
+  (require 'unison-ts-repl)
+  (let* ((unison-ts-inferior-ucm-buffer-name "*ucm-test-cleanup*")
+         (buf (get-buffer-create unison-ts-inferior-ucm-buffer-name)))
+    (unwind-protect
+        (let ((unison-ts--ucm-process nil))
+          (should (buffer-live-p buf))
+          (unison-ts--cleanup-ucm)
+          (should-not (buffer-live-p buf)))
+      (when (buffer-live-p buf) (kill-buffer buf)))))
+
+(ert-deftest unison-ts-inferior/mode-set-before-process-attach ()
+  "Mode must be active before `make-comint-in-buffer' starts the process.
+This avoids a race where `define-derived-mode' \\='s
+`kill-all-local-variables' blanks `comint-last-output-start' while
+UCM is already emitting output, which crashes any `:after' advice
+on `comint-output-filter' that reads the marker (e.g. Doom's
+`doom--comint-enable-undo-a').  Regression test for the
+`Wrong type argument: number-or-marker-p, nil' bug."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((mode-at-attach nil)
+        (unison-ts-ucm-executable "true")
+        (unison-ts-lsp-port 1)
+        (unison-ts-inferior-ucm-buffer-name "*ucm-test-order*"))
+    (cl-letf (((symbol-function 'make-comint-in-buffer)
+               (lambda (_name buffer _program _startfile &rest _switches)
+                 (let ((buf (if (bufferp buffer) buffer (get-buffer-create buffer))))
+                   (with-current-buffer buf
+                     (setq mode-at-attach major-mode))
+                   buf)))
+              ((symbol-function 'sit-for) (lambda (&rest _) t)))
+      (condition-case _ (unison-ts--start-ucm-inferior) (error nil)))
+    (should (provided-mode-derived-p mode-at-attach 'unison-ts-inferior-ucm-mode))))
+
+(ert-deftest unison-ts-inferior/start-failure-clears-state ()
+  "When UCM never opens the LSP port, cleanup runs and the var clears."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let* ((unison-ts-ucm-executable "true")
+         (unison-ts-lsp-port 1)
+         (unison-ts-inferior-ucm-buffer-name "*ucm-test-failure*")
+         (unison-ts--ucm-process nil))
+    (cl-letf (((symbol-function 'sit-for) (lambda (&rest _) t)))
+      (should-error (unison-ts--start-ucm-inferior) :type 'error))
+    (should (null unison-ts--ucm-process))
+    (should-not (get-buffer unison-ts-inferior-ucm-buffer-name))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

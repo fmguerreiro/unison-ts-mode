@@ -215,9 +215,19 @@ Signals an error if no project context is found."
 
 (defcustom unison-ts-lsp-port 5757
   "Port for the UCM LSP server.
-This is the default port UCM uses for LSP (language server protocol)."
+This is the default port UCM uses for LSP (language server protocol).
+The environment variable UNISON_LSP_PORT overrides this value at
+runtime via `unison-ts--resolve-lsp-port'."
   :type 'integer
   :group 'unison-ts-repl)
+
+(defun unison-ts--resolve-lsp-port ()
+  "Return the effective UCM LSP port.
+Uses the UNISON_LSP_PORT env var when set, falling back to the
+`unison-ts-lsp-port' defcustom."
+  (if-let ((env (getenv "UNISON_LSP_PORT")))
+      (string-to-number env)
+    unison-ts-lsp-port))
 
 (defun unison-ts-api--port-open-p (port)
   "Return non-nil if PORT is accepting connections on localhost."
@@ -233,7 +243,7 @@ This is the default port UCM uses for LSP (language server protocol)."
 
 (defun unison-ts-api--lsp-running-p ()
   "Return non-nil if UCM LSP server is running."
-  (unison-ts-api--port-open-p unison-ts-lsp-port))
+  (unison-ts-api--port-open-p (unison-ts--resolve-lsp-port)))
 
 (defun unison-ts-project-root ()
   "Find Unison project root by looking for .unison directory.
@@ -651,51 +661,128 @@ Returns nil if no REPL buffer exists or it's not usable."
         (when (derived-mode-p 'unison-ts-mcp-repl-mode)
           buf)))))
 
-(defvar unison-ts--ucm-headless-process nil
-  "Process object for UCM headless started by us.")
+;;; Inferior UCM
+;;
+;; The inferior UCM is the full `ucm' executable running inside an Emacs
+;; comint buffer.  It serves both LSP (for eglot/lsp-mode) and MCP (for
+;; the REPL) on `unison-ts-lsp-port'.  Running the full UCM rather than
+;; `ucm headless' means the user can interact with the UCM TUI inside
+;; Emacs without fighting the codebase lock — the lock is held by the
+;; same UCM that Emacs is talking to.
+;;
+;; This addresses gh#8: an Emacs-spawned `ucm headless' previously held
+;; the lock and prevented users from running `ucm' (full TUI) elsewhere.
 
-(defun unison-ts--cleanup-ucm-headless ()
-  "Clean up UCM headless process on Emacs exit."
-  (when (and unison-ts--ucm-headless-process
-             (process-live-p unison-ts--ucm-headless-process))
-    (delete-process unison-ts--ucm-headless-process)
-    (setq unison-ts--ucm-headless-process nil)))
+(defcustom unison-ts-inferior-ucm-buffer-name "*ucm*"
+  "Buffer name for the inferior UCM (full TUI) process."
+  :type 'string
+  :group 'unison-ts-repl)
 
-(add-hook 'kill-emacs-hook #'unison-ts--cleanup-ucm-headless)
+(defvar unison-ts--ucm-process nil
+  "Process object for the inferior UCM started by Emacs.")
 
-(defun unison-ts--start-ucm-headless ()
-  "Start UCM in headless mode if not already running.
-Returns non-nil when UCM headless is ready."
-  (unless (unison-ts-api--lsp-running-p)
-    (let ((default-directory (unison-ts-project-root)))
-      (message "Starting UCM headless...")
-      (setq unison-ts--ucm-headless-process
-            (start-process "ucm-headless" "*ucm-headless*"
-                           unison-ts-ucm-executable "headless"))
-      (set-process-query-on-exit-flag unison-ts--ucm-headless-process nil)
-      ;; Wait for LSP port to be ready (max 10 seconds)
-      (let ((attempts 0))
-        (while (and (< attempts unison-ts--lsp-startup-max-attempts)
-                    (not (unison-ts-api--lsp-running-p)))
-          (sit-for 0.1)
-          (setq attempts (1+ attempts))))
-      (if (unison-ts-api--lsp-running-p)
-          (message "UCM headless started on port %d" unison-ts-lsp-port)
-        (error "Failed to start UCM headless"))))
-  t)
+(defun unison-ts--ucm-on-buffer-kill ()
+  "Buffer-local hook: stop the tracked UCM process without killing the buffer.
+The buffer is being killed already; recursing through `unison-ts--cleanup-ucm'
+would call `kill-buffer' again and blow the stack."
+  (when (and unison-ts--ucm-process
+             (process-live-p unison-ts--ucm-process))
+    (delete-process unison-ts--ucm-process))
+  (setq unison-ts--ucm-process nil))
+
+(defun unison-ts--cleanup-ucm ()
+  "Tear down the inferior UCM process and buffer started by Emacs."
+  (when-let ((buf (get-buffer unison-ts-inferior-ucm-buffer-name)))
+    (let ((kill-buffer-query-functions nil))
+      (kill-buffer buf)))
+  (when (and unison-ts--ucm-process
+             (process-live-p unison-ts--ucm-process))
+    (delete-process unison-ts--ucm-process))
+  (setq unison-ts--ucm-process nil))
+
+(add-hook 'kill-emacs-hook #'unison-ts--cleanup-ucm)
+
+(define-derived-mode unison-ts-inferior-ucm-mode comint-mode "UCM"
+  "Major mode for the inferior UCM (Unison Codebase Manager) process.
+
+Inherits from `comint-mode' and enables ANSI colour processing so
+UCM's coloured output renders correctly."
+  :group 'unison-ts-repl
+  (setq-local comint-prompt-regexp "^[^>\n]*>+ ")
+  (setq-local comint-prompt-read-only t)
+  (setq-local comint-process-echoes nil)
+  (ansi-color-for-comint-mode-on)
+  (add-hook 'kill-buffer-hook #'unison-ts--ucm-on-buffer-kill nil t))
+
+(defun unison-ts--start-ucm-inferior ()
+  "Start the inferior UCM process if not already running.
+Returns the inferior UCM buffer, or nil when an external UCM is
+already serving `unison-ts-lsp-port'.  Signals an error if the
+LSP/MCP port never becomes reachable after starting."
+  (unison-ts--ensure-ucm)
+  (let* ((buf-name unison-ts-inferior-ucm-buffer-name)
+         (existing-buf (get-buffer buf-name))
+         (existing-proc (and existing-buf (get-buffer-process existing-buf))))
+    (cond
+     ((and existing-proc (process-live-p existing-proc))
+      existing-buf)
+     ((unison-ts-api--lsp-running-p)
+      nil)
+     (t
+      (let* ((default-directory (unison-ts-project-root))
+             (buf (get-buffer-create buf-name))
+             (port (unison-ts--resolve-lsp-port)))
+        ;; Set the mode BEFORE attaching the process.  `make-comint-in-buffer'
+        ;; sees `derived-mode-p' is t and skips its own `comint-mode' setup,
+        ;; which avoids a race where `kill-all-local-variables' blanks
+        ;; `comint-last-output-start' while UCM is already emitting output —
+        ;; an `:after' advice on `comint-output-filter' (e.g. Doom's
+        ;; `doom--comint-enable-undo-a') would then crash on the nil marker.
+        (with-current-buffer buf
+          (unison-ts-inferior-ucm-mode))
+        (make-comint-in-buffer "ucm" buf unison-ts-ucm-executable nil)
+        (setq unison-ts--ucm-process (get-buffer-process buf))
+        (unless unison-ts--ucm-process
+          (kill-buffer buf)
+          (error "make-comint-in-buffer did not attach a process to %s" buf-name))
+        (set-process-query-on-exit-flag unison-ts--ucm-process nil)
+        (message "Starting UCM...")
+        (let ((attempts 0))
+          (while (and (< attempts unison-ts--lsp-startup-max-attempts)
+                      (not (unison-ts-api--lsp-running-p)))
+            (sit-for 0.1)
+            (setq attempts (1+ attempts))))
+        (unless (unison-ts-api--lsp-running-p)
+          (unison-ts--cleanup-ucm)
+          (error "UCM started but LSP/MCP port %d did not open" port))
+        (message "UCM started on port %d" port)
+        buf)))))
+
+;;;###autoload
+(defun unison-ts-inferior-ucm ()
+  "Switch to the inferior UCM buffer, starting UCM if needed.
+The inferior UCM is the full `ucm' TUI running inside Emacs; it
+serves both eglot and the MCP REPL.  Errors when an external UCM
+is already holding the codebase lock — manage it there instead."
+  (interactive)
+  (let ((buf (unison-ts--start-ucm-inferior)))
+    (unless buf
+      (user-error
+       "UCM is already running externally on port %d; manage it there"
+       (unison-ts--resolve-lsp-port)))
+    (pop-to-buffer buf)))
 
 (defun unison-ts-repl--start ()
   "Start UCM REPL for the current project.
-Always uses MCP-based REPL. If no UCM headless is running, starts one first.
-This ensures a single UCM process serves both LSP (eglot) and REPL."
+Always uses MCP-based REPL.  If no UCM is running, starts the
+inferior UCM first.  A single UCM process serves both LSP (eglot)
+and the MCP REPL."
   (unison-ts--ensure-ucm)
   (let ((existing-buf (unison-ts-repl--get-buffer)))
     (cond
-     ;; Already have a usable REPL buffer
      (existing-buf existing-buf)
-     ;; Start UCM headless if needed, then use MCP REPL
      (t
-      (unison-ts--start-ucm-headless)
+      (unison-ts--start-ucm-inferior)
       (unison-ts-repl--start-mcp)))))
 
 (defun unison-ts-repl--start-mcp ()

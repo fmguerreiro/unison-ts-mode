@@ -100,7 +100,7 @@ Navigate to functions, types, and abilities:
 
 ### LSP Support
 
-Requires [UCM](https://www.unison-lang.org/docs/install-instructions/). UCM auto-starts in headless mode when you open a `.u` file.
+Requires [UCM](https://www.unison-lang.org/docs/install-instructions/). UCM auto-starts as the inferior UCM (full TUI in a comint buffer) the first time eglot, lsp-mode, or the REPL needs it. The same process serves LSP, MCP, and the user-facing TUI, so there is no codebase-lock conflict.
 
 **Eglot (built-in Emacs 29+):**
 
@@ -134,8 +134,10 @@ export UNISON_LSP_PORT=5758
 
 **Manual UCM:**
 
+If you would rather manage UCM yourself, just start it before connecting (Emacs detects it on the LSP port and skips the auto-spawn):
+
 ```bash
-ucm headless
+ucm
 ```
 
 ### UCM Integration
@@ -144,7 +146,8 @@ Interact with UCM directly from Emacs. Open the REPL with `C-c C-u r` or use the
 
 | Keybinding | Command | Description |
 |------------|---------|-------------|
-| `C-c C-u r` | `unison-ts-repl` | Open UCM REPL |
+| `C-c C-u r` | `unison-ts-repl` | Open UCM REPL (MCP-based) |
+| `C-c C-u i` | `unison-ts-inferior-ucm` | Open the inferior UCM (full TUI) |
 | `C-c C-u a` | `unison-ts-add` | Add definitions from current file |
 | `C-c C-u u` | `unison-ts-update` | Update existing definitions |
 | `C-c C-u t` | `unison-ts-test` | Run tests (prompts for pattern) |
