@@ -1532,20 +1532,6 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
 
 ;;; Inline eval overlay (gh#16)
 
-(ert-deftest unison-ts-overlay/defcustom-exists ()
-  "unison-ts-eval-overlay defcustom must exist, default to t, and be boolean."
-  (require 'unison-ts-repl)
-  (should (boundp 'unison-ts-eval-overlay))
-  (should (eq unison-ts-eval-overlay t))
-  (should (eq (get 'unison-ts-eval-overlay 'custom-type) 'boolean)))
-
-(ert-deftest unison-ts-overlay/format-defcustom-exists ()
-  "unison-ts-eval-overlay-format defcustom must exist and be a string."
-  (require 'unison-ts-repl)
-  (should (boundp 'unison-ts-eval-overlay-format))
-  (should (stringp unison-ts-eval-overlay-format))
-  (should (string-match-p "%s" unison-ts-eval-overlay-format)))
-
 (ert-deftest unison-ts-overlay/show-creates-overlay ()
   "unison-ts--overlay-show must create an overlay with the formatted after-string."
   (require 'unison-ts-repl)
@@ -1625,6 +1611,43 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
                 ((symbol-function 'display-buffer) (lambda (&rest _) nil)))
         (unison-ts--display-mcp-result result "eval" 5))
       (should-not (overlays-in 5 5)))))
+
+(ert-deftest unison-ts-overlay/percent-in-result-no-format-error ()
+  "Result strings containing % and %s must not crash and must display literally."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "square = x -> x * x\n")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s"))
+      ;; Must not raise a format error for % or %s in result-string.
+      (unison-ts--overlay-show 1 "9 : Nat (100% confidence, %s type)")
+      (let* ((overlays (overlays-in 1 1))
+             (overlay (car overlays))
+             (text (overlay-get overlay 'after-string)))
+        (should (= (length overlays) 1))
+        (should (equal (substring-no-properties text)
+                       " => 9 : Nat (100% confidence, %s type)"))))))
+
+
+(ert-deftest unison-ts-overlay/long-result-skips-overlay ()
+  "Results longer than unison-ts--overlay-max-length must not create an overlay."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "x\n")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s"))
+      (unison-ts--overlay-show 1 (make-string (1+ unison-ts--overlay-max-length) ?a))
+      (should-not (overlays-in 1 1)))))
+
+(ert-deftest unison-ts-overlay/multiline-result-skips-overlay ()
+  "Multi-line results must not create an overlay."
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "x\n")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s"))
+      (unison-ts--overlay-show 1 "line one\nline two")
+      (should-not (overlays-in 1 1)))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

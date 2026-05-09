@@ -75,11 +75,18 @@ default (minibuffer only)."
   (setq unison-ts--eval-overlay nil)
   (remove-hook 'pre-command-hook #'unison-ts--overlay-clear t))
 
+(defconst unison-ts--overlay-max-length 120
+  "Maximum character length for inline eval result overlays.
+Results longer than this are not shown as overlays.")
+
 (defun unison-ts--overlay-show (position result-string)
   "Display RESULT-STRING as a transient overlay at POSITION.
 POSITION is a buffer position (integer or marker).
-Does nothing when `unison-ts-eval-overlay' is nil."
-  (when unison-ts-eval-overlay
+Does nothing when `unison-ts-eval-overlay' is nil, when RESULT-STRING
+contains a newline, or when it exceeds `unison-ts--overlay-max-length'."
+  (when (and unison-ts-eval-overlay
+             (not (string-match-p "\n" result-string))
+             (<= (length result-string) unison-ts--overlay-max-length))
     (unison-ts--overlay-clear)
     (let* ((text (format unison-ts-eval-overlay-format result-string))
            (overlay (make-overlay position position nil t t)))
@@ -926,13 +933,12 @@ Works with both subprocess-based and MCP-based REPLs."
           (push msg result))))
     (nreverse result)))
 
-(defun unison-ts--display-mcp-result (result title &optional at)
+(defun unison-ts--display-mcp-result (result title at)
   "Display MCP RESULT appropriately based on content.
 Short success messages go to minibuffer, errors/long output to a buffer.
-AT is a buffer position; when non-nil and the result is a success,
-an inline overlay is shown at that position in addition to the minibuffer
-message.  Defaults to `(point)' when nil."
-  (let ((overlay-position (or at (point))))
+AT is a buffer position; when the result is a success, an inline overlay
+is shown at that position in addition to the minibuffer message."
+  (let ((overlay-position at))
     (if (and result (listp result))
         (let* ((content-array (alist-get 'content result))
                (content (if (vectorp content-array)
