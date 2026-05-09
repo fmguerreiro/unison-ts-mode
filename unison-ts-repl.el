@@ -728,7 +728,8 @@ LSP/MCP port never becomes reachable after starting."
       nil)
      (t
       (let* ((default-directory (unison-ts-project-root))
-             (buf (get-buffer-create buf-name)))
+             (buf (get-buffer-create buf-name))
+             (port (unison-ts--resolve-lsp-port)))
         ;; Set the mode BEFORE attaching the process.  `make-comint-in-buffer'
         ;; sees `derived-mode-p' is t and skips its own `comint-mode' setup,
         ;; which avoids a race where `kill-all-local-variables' blanks
@@ -739,8 +740,10 @@ LSP/MCP port never becomes reachable after starting."
           (unison-ts-inferior-ucm-mode))
         (make-comint-in-buffer "ucm" buf unison-ts-ucm-executable nil)
         (setq unison-ts--ucm-process (get-buffer-process buf))
-        (when unison-ts--ucm-process
-          (set-process-query-on-exit-flag unison-ts--ucm-process nil))
+        (unless unison-ts--ucm-process
+          (kill-buffer buf)
+          (error "make-comint-in-buffer did not attach a process to %s" buf-name))
+        (set-process-query-on-exit-flag unison-ts--ucm-process nil)
         (message "Starting UCM...")
         (let ((attempts 0))
           (while (and (< attempts unison-ts--lsp-startup-max-attempts)
@@ -749,9 +752,8 @@ LSP/MCP port never becomes reachable after starting."
             (setq attempts (1+ attempts))))
         (unless (unison-ts-api--lsp-running-p)
           (unison-ts--cleanup-ucm)
-          (error "UCM started but LSP/MCP port %d did not open"
-                 (unison-ts--resolve-lsp-port)))
-        (message "UCM started on port %d" (unison-ts--resolve-lsp-port))
+          (error "UCM started but LSP/MCP port %d did not open" port))
+        (message "UCM started on port %d" port)
         buf)))))
 
 ;;;###autoload
