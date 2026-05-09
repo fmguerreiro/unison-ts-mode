@@ -154,6 +154,12 @@ Interact with UCM directly from Emacs. Open the REPL with `C-c C-u r` or use the
 | `C-c C-u x` | `unison-ts-run` | Run a term |
 | `C-c C-u w` | `unison-ts-watch` | Watch current file for changes |
 | `C-c C-u l` | `unison-ts-load` | Load current file |
+| `C-c C-u v` | `unison-ts-eval` | Evaluate expression via MCP |
+| `C-c C-u e` | `unison-ts-send-region` | Send region to UCM via MCP |
+| `C-c C-u d` | `unison-ts-send-definition` | Send definition at point to UCM |
+| `C-c C-u V` | `unison-ts-eval-and-go` | Evaluate expression and switch to REPL |
+| `C-c C-u E` | `unison-ts-send-region-and-go` | Send region to REPL and switch to it |
+| `C-c C-u D` | `unison-ts-send-definition-and-go` | Send definition to REPL and switch to it |
 
 ## Troubleshooting
 

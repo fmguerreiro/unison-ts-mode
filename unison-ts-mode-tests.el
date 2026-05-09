@@ -1530,5 +1530,55 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
     (should (null unison-ts--ucm-process))
     (should-not (get-buffer unison-ts-inferior-ucm-buffer-name))))
 
+;;; -and-go command tests (gh#15)
+
+(ert-deftest unison-ts-and-go/commands-are-interactive ()
+  "All -and-go commands must be autoloaded interactive commands."
+  (require 'unison-ts-repl)
+  (should (fboundp 'unison-ts-eval-and-go))
+  (should (commandp 'unison-ts-eval-and-go))
+  (should (fboundp 'unison-ts-send-region-and-go))
+  (should (commandp 'unison-ts-send-region-and-go))
+  (should (fboundp 'unison-ts-send-definition-and-go))
+  (should (commandp 'unison-ts-send-definition-and-go)))
+
+(ert-deftest unison-ts-and-go/keybindings ()
+  "Uppercase V/E/D must be bound to the -and-go variants."
+  (require 'unison-ts-mode)
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u V"))
+              'unison-ts-eval-and-go))
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u E"))
+              'unison-ts-send-region-and-go))
+  (should (eq (lookup-key unison-ts-mode-map (kbd "C-c C-u D"))
+              'unison-ts-send-definition-and-go)))
+
+(ert-deftest unison-ts-and-go/eval-routes-to-watch ()
+  "`unison-ts-eval-and-go' must call `unison-ts-mcp-repl--execute-async'
+with command 'watch and the expression as args."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let ((captured-command nil)
+        (captured-args nil)
+        (repl-buf (get-buffer-create "*ucm-test-and-go*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer repl-buf
+            (unison-ts-mcp-repl-mode)
+            (setq unison-ts-mcp-repl--project-root default-directory)
+            (unison-ts-mcp-repl--insert-prompt))
+          ;; Stub the REPL buffer lookup so we get our test buffer.
+          (cl-letf (((symbol-function 'unison-ts-repl--get-buffer)
+                     (lambda () repl-buf))
+                    ((symbol-function 'pop-to-buffer)
+                     (lambda (_buf) nil))
+                    ((symbol-function 'unison-ts-mcp-repl--execute-async)
+                     (lambda (cmd args _cb)
+                       (setq captured-command cmd)
+                       (setq captured-args args))))
+            (unison-ts-eval-and-go "1 + 2"))
+          (should (eq captured-command 'watch))
+          (should (equal captured-args "1 + 2")))
+      (when (buffer-live-p repl-buf) (kill-buffer repl-buf)))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

@@ -863,6 +863,22 @@ Works with both subprocess-based and MCP-based REPLs."
         (comint-send-string (get-buffer-process buf) (concat command "\n"))))
     (display-buffer buf)))
 
+(defun unison-ts--send-to-repl-and-go (command)
+  "Send COMMAND to the UCM REPL and switch to it.
+Like `unison-ts--send-to-repl' but uses `pop-to-buffer' instead of
+`display-buffer' so the REPL becomes the selected window."
+  (let ((buf (or (unison-ts-repl--get-buffer)
+                 (unison-ts-repl--start))))
+    (with-current-buffer buf
+      (if (derived-mode-p 'unison-ts-mcp-repl-mode)
+          (progn
+            (goto-char (point-max))
+            (insert command)
+            (unison-ts-mcp-repl-send))
+        (goto-char (point-max))
+        (comint-send-string (get-buffer-process buf) (concat command "\n"))))
+    (pop-to-buffer buf)))
+
 (defun unison-ts--parse-mcp-output (text)
   "Parse MCP output TEXT which may be JSON-encoded UCM response."
   (condition-case nil
@@ -1077,6 +1093,41 @@ For pure expressions, use `unison-ts-eval' instead."
       (let* ((code (treesit-node-text def-node t))
              (result (unison-ts-mcp--update-definitions code)))
         (unison-ts--display-mcp-result result "eval")))))
+
+;;;###autoload
+(defun unison-ts-eval-and-go (expr)
+  "Evaluate EXPR via the UCM MCP REPL and switch to the REPL buffer.
+Inserts \"> EXPR\" as a typed-prompt entry and switches to the REPL,
+mirroring `unison-ts-eval' but routing output through the REPL buffer
+instead of the minibuffer or a separate output buffer."
+  (interactive "sExpression: ")
+  (unison-ts--send-to-repl-and-go (concat "> " expr)))
+
+;;;###autoload
+(defun unison-ts-send-region-and-go (start end)
+  "Send the region between START and END to the UCM MCP REPL and switch to it.
+Inserts \"add <region>\" as a typed-prompt entry and switches to the
+REPL buffer, mirroring `unison-ts-send-region'."
+  (interactive "r")
+  (unless (use-region-p)
+    (user-error "No region active"))
+  (let ((code (buffer-substring-no-properties start end)))
+    (unison-ts--send-to-repl-and-go (concat "add " code))))
+
+;;;###autoload
+(defun unison-ts-send-definition-and-go ()
+  "Send the definition at point to the UCM MCP REPL and switch to it.
+Inserts \"add <definition>\" as a typed-prompt entry and switches to
+the REPL buffer, mirroring `unison-ts-send-definition'."
+  (interactive)
+  (let ((node (treesit-node-at (point))))
+    (unless node
+      (user-error "No tree-sitter node at point"))
+    (let ((def-node (treesit-parent-until node #'unison-ts--definition-node-p t)))
+      (unless def-node
+        (user-error "Point is not within a definition"))
+      (let ((code (treesit-node-text def-node t)))
+        (unison-ts--send-to-repl-and-go (concat "add " code))))))
 
 (provide 'unison-ts-repl)
 
