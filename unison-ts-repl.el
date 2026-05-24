@@ -558,7 +558,8 @@ Examples:
       (cons 'watch trimmed)))))
 
 (defun unison-ts-mcp-repl--execute-async (command args callback)
-  "Execute MCP COMMAND with ARGS asynchronously, calling CALLBACK with result string."
+  "Execute MCP COMMAND with ARGS asynchronously.
+CALLBACK is called with the result string."
   (let ((default-directory (or unison-ts-mcp-repl--project-root
                                default-directory))
         (repl-buffer (current-buffer)))
