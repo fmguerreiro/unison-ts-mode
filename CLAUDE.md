@@ -42,7 +42,7 @@ emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.e
 
 Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `662bf52b966108cf299090a238cd6abfb65d5170` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
 
-Do not bump the pin to a newer upstream commit without testing on Emacs 29 and 30. Commits after `b2ae57b` (2026-02-05) were regenerated with a newer tree-sitter CLI and misparse `let`/`handle` expressions on the tree-sitter runtime bundled with Emacs 29 and some Emacs 30 builds.
+Do not bump the pin to a newer upstream commit without testing on Emacs 29 and 30. The pin is the parent of `b2ae57b` (2026-02-05); that commit and later were regenerated with a newer tree-sitter CLI and misparse `let`/`handle` expressions on the older tree-sitter runtimes bundled with Emacs 29 and some Emacs 30 builds.
 
 ## UCM Keybindings
 
