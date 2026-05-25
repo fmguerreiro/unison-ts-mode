@@ -21,3 +21,6 @@ dist/
 # UCM codebase state in example directories
 .unison/
 .unisonHistory
+
+# Local, machine-specific Claude instructions
+CLAUDE.local.md
