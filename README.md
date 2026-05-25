@@ -27,7 +27,7 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 
 ## Requirements
 
-- Emacs 29+ (with native tree-sitter support)
+- Emacs 30+ (the pinned grammar needs the tree-sitter runtime bundled with Emacs 30; on Emacs 29 `let` and `handle` expressions misparse)
 - [Unison tree-sitter grammar](https://github.com/kylegoetz/tree-sitter-unison) (auto-installed)
 
 ## Installation
@@ -102,7 +102,7 @@ Navigate to functions, types, and abilities:
 
 Requires [UCM](https://www.unison-lang.org/docs/install-instructions/). UCM auto-starts as the inferior UCM (full TUI in a comint buffer) the first time eglot, lsp-mode, or the REPL needs it. The same process serves LSP, MCP, and the user-facing TUI, so there is no codebase-lock conflict.
 
-**Eglot (built-in Emacs 29+):**
+**Eglot (built-in):**
 
 ```elisp
 (with-eval-after-load 'unison-ts-mode

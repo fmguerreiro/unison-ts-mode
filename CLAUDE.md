@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Emacs major mode for the Unison programming language using tree-sitter for syntax highlighting and indentation. Requires Emacs 29+ with native tree-sitter support. Files with `.u` or `.unison` extensions activate this mode.
+Emacs major mode for the Unison programming language using tree-sitter for syntax highlighting and indentation. Requires Emacs 30+ with native tree-sitter support (the pinned grammar misparses `let`/`handle` expressions on Emacs 29's older tree-sitter runtime). Files with `.u` or `.unison` extensions activate this mode.
 
 ## Architecture
 
