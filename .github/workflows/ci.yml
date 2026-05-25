@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        emacs: ['30.1', '30.2']
+        emacs: ['29.1', '29.4', '30.1', '30.2']
     steps:
       - uses: actions/checkout@v4
 
@@ -110,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        emacs: ['30.1', '30.2']
+        emacs: ['29.1', '29.4', '30.1', '30.2']
     steps:
       - uses: actions/checkout@v4
 
@@ -124,7 +124,7 @@ jobs:
           git clone --filter=blob:none --no-checkout \
             https://github.com/kylegoetz/tree-sitter-unison.git /tmp/tree-sitter-unison
           cd /tmp/tree-sitter-unison
-          git checkout 10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b
+          git checkout 662bf52b966108cf299090a238cd6abfb65d5170
           mkdir -p ~/.emacs.d/tree-sitter
           cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
             -I src src/parser.c src/scanner.c

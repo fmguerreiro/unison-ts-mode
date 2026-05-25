@@ -6,7 +6,7 @@
 ;; Maintainer: Filipe Guerreiro <filipe.m.guerreiro@gmail.com>
 ;; Created: November 11, 2023
 ;; Version: 0.3.0
-;; Package-Requires: ((emacs "30.1"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages unison tree-sitter
 ;; URL: https://github.com/fmguerreiro/unison-ts-mode
 

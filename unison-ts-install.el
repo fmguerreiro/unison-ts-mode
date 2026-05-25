@@ -37,11 +37,14 @@
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision "10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b"
+(defcustom unison-ts-grammar-revision "662bf52b966108cf299090a238cd6abfb65d5170"
   "Git revision (branch, tag, or commit) for the grammar.
 If nil, uses the default branch.
-Pinned to a verified upstream commit; bump after re-running the test
-suite against a newer revision."
+Pinned to the last upstream commit whose generated parser runs on the
+tree-sitter runtime bundled with Emacs 29.  Later upstream commits were
+regenerated with a newer tree-sitter CLI and misparse `let'/`handle'
+expressions on older runtimes; bump only after verifying a newer
+revision against Emacs 29 and 30."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)

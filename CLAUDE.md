@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Emacs major mode for the Unison programming language using tree-sitter for syntax highlighting and indentation. Requires Emacs 30+ with native tree-sitter support (on Emacs 29's older tree-sitter runtime the pinned grammar misparses `let` and `handle` expressions). Files with `.u` or `.unison` extensions activate this mode.
+Emacs major mode for the Unison programming language using tree-sitter for syntax highlighting and indentation. Requires Emacs 29+ with native tree-sitter support. Files with `.u` or `.unison` extensions activate this mode.
 
 ## Architecture
 
@@ -40,7 +40,9 @@ emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.e
 
 ## Tree-sitter Grammar
 
-Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
+Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `662bf52b966108cf299090a238cd6abfb65d5170` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
+
+Do not bump the pin to a newer upstream commit without testing on Emacs 29 and 30. Commits after `b2ae57b` (2026-02-05) were regenerated with a newer tree-sitter CLI and misparse `let`/`handle` expressions on the tree-sitter runtime bundled with Emacs 29 and some Emacs 30 builds.
 
 ## UCM Keybindings
 
