@@ -17,3 +17,7 @@ dist/
 *.so
 *.dylib
 *.dll
+
+# UCM codebase state in example directories
+.unison/
+.unisonHistory
