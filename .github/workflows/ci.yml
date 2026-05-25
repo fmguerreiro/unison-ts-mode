@@ -119,16 +119,12 @@ jobs:
         with:
           version: ${{ matrix.emacs }}
 
-      - name: Install tree-sitter CLI
-        run: |
-          npm install -g tree-sitter-cli
-
       - name: Build Unison grammar
         run: |
-          git clone https://github.com/kylegoetz/tree-sitter-unison.git /tmp/tree-sitter-unison
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/kylegoetz/tree-sitter-unison.git /tmp/tree-sitter-unison
           cd /tmp/tree-sitter-unison
           git checkout 10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b
-          tree-sitter generate
           mkdir -p ~/.emacs.d/tree-sitter
           cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
             -I src src/parser.c src/scanner.c
