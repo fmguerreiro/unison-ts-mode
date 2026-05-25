@@ -313,41 +313,6 @@ Signals an error if UCM is not found."
 (defvar unison-ts-repl--buffers (make-hash-table :test 'equal :weakness 'value)
   "Hash table mapping project roots to their UCM REPL buffers.")
 
-(defun unison-ts--external-ucm-pids ()
-  "Return list of external UCM process PIDs (not managed by Emacs)."
-  (let ((emacs-ucm-pids (delq nil
-                              (mapcar (lambda (buf)
-                                        (when-let ((proc (get-buffer-process buf)))
-                                          (process-id proc)))
-                                      (hash-table-values unison-ts-repl--buffers))))
-        (all-pids nil))
-    (with-temp-buffer
-      (when (zerop (call-process "pgrep" nil t nil "-x" "ucm"))
-        (setq all-pids (mapcar #'string-to-number
-                               (split-string (buffer-string) "\n" t)))))
-    (seq-difference all-pids emacs-ucm-pids)))
-
-(defun unison-ts--find-ucm-buffer ()
-  "Find any buffer running UCM (term, vterm, eshell, shell, or MCP REPL).
-Returns the buffer or nil."
-  (seq-find (lambda (buf)
-              (with-current-buffer buf
-                (or
-                 ;; MCP REPL mode buffer
-                 (derived-mode-p 'unison-ts-mcp-repl-mode)
-                 ;; Process-based UCM buffer
-                 (and (process-live-p (get-buffer-process buf))
-                      (string-match-p "ucm" (buffer-name buf))))))
-            (buffer-list)))
-
-(defun unison-ts--kill-external-ucm ()
-  "Kill external UCM processes after confirmation."
-  (let ((pids (unison-ts--external-ucm-pids)))
-    (when pids
-      (dolist (pid pids)
-        (signal-process pid 'TERM))
-      (sit-for 0.5))))
-
 ;;; Comint-based REPL (when no headless UCM is running)
 
 (defvar unison-ts-repl-mode-map
