@@ -1695,5 +1695,47 @@ the parser routes to the 'add command."
     (should (eq (car parsed) 'add))
     (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
 
+;;; Grammar installation - fail-fast behavior
+
+(ert-deftest unison-ts-install/propagates-failure ()
+  "A clone/checkout/build failure must propagate, not return nil."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((treesit-language-source-alist treesit-language-source-alist)
+        (unison-ts--install-prompted nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (error "clone failed"))))
+      (should-error (unison-ts-install-grammar) :type 'error))))
+
+(ert-deftest unison-ts-install/error-names-repository ()
+  "The propagated error names the repository and revision for context."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((treesit-language-source-alist treesit-language-source-alist)
+        (unison-ts--install-prompted nil)
+        (unison-ts-grammar-repository "https://example.invalid/grammar")
+        (unison-ts-grammar-revision "abc123"))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (error "clone failed"))))
+      (let ((signaled-message
+             (condition-case err
+                 (progn (unison-ts-install-grammar) nil)
+               (error (error-message-string err)))))
+        (should (equal
+                 signaled-message
+                 (concat "Failed to install Unison grammar from "
+                         "https://example.invalid/grammar (revision abc123): "
+                         "clone failed")))))))
+
+(ert-deftest unison-ts-install/returns-t-on-success ()
+  "A successful install returns t."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((treesit-language-source-alist treesit-language-source-alist)
+        (unison-ts--install-prompted nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) t)))
+      (should (eq (unison-ts-install-grammar) t)))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

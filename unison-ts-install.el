@@ -54,26 +54,35 @@ revision against Emacs 29 and 30."
   "Whether we've already prompted for installation this session.")
 
 (defun unison-ts-install-grammar ()
-  "Install tree-sitter grammar for Unison."
+  "Install tree-sitter grammar for Unison.
+Signal an error if cloning, checkout, or building the grammar fails;
+the grammar is pinned to a specific revision and a partial install
+would silently degrade syntax highlighting."
   (interactive)
   (unless (assoc 'unison treesit-language-source-alist)
     (add-to-list 'treesit-language-source-alist
                  (if unison-ts-grammar-revision
                      (list 'unison unison-ts-grammar-repository unison-ts-grammar-revision)
                    (list 'unison unison-ts-grammar-repository))))
+  (message "Installing Unison grammar...")
   (condition-case err
       (progn
-        (message "Installing Unison grammar...")
         (treesit-install-language-grammar 'unison)
         (message "Unison grammar installed successfully")
         t)
     (error
-     (message "Failed to install Unison grammar: %s" (error-message-string err))
-     nil)))
+     (signal (car err)
+             (list (format "Failed to install Unison grammar from %s%s: %s"
+                           unison-ts-grammar-repository
+                           (if unison-ts-grammar-revision
+                               (format " (revision %s)" unison-ts-grammar-revision)
+                             "")
+                           (error-message-string err)))))))
 
 (defun unison-ts-ensure-grammar ()
   "Ensure tree-sitter grammar for Unison is installed.
-Returns t if grammar is available, nil otherwise."
+Return t if grammar is available, nil if installation was declined or
+disabled.  Signal an error if an attempted installation fails."
   (cond
    ((treesit-language-available-p 'unison)
     t)
