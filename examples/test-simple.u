@@ -1,0 +1,4 @@
+double : Nat -> Nat
+double x = x Nat.+ x
+
+triple x = x Nat.+ x Nat.+ x

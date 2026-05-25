@@ -1,0 +1,16 @@
+-- Simple Unison file for testing unison-ts-mode
+
+greet : Text -> Text
+greet name = "Hello, " ++ name ++ "!"
+
+factorial : Nat -> Nat
+factorial n =
+  if n == 2 then 1
+  else n * factorial (n - 1)
+
+type Status = Active | Inactive | Pending
+
+main : '{IO, Exception} ()
+main = do
+  printLine (greet "World")
+  printLine (Nat.toText (factorial 5))
