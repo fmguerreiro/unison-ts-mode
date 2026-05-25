@@ -40,7 +40,7 @@ emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.e
 
 ## Tree-sitter Grammar
 
-Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to a verified commit via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
+Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
 
 ## UCM Keybindings
 

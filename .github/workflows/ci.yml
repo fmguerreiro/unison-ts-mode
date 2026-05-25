@@ -125,14 +125,20 @@ jobs:
 
       - name: Build Unison grammar
         run: |
-          git clone --depth 1 https://github.com/fmguerreiro/tree-sitter-unison.git /tmp/tree-sitter-unison
+          git clone https://github.com/kylegoetz/tree-sitter-unison.git /tmp/tree-sitter-unison
           cd /tmp/tree-sitter-unison
+          git checkout 10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b
           tree-sitter generate
           mkdir -p ~/.emacs.d/tree-sitter
-          if [ -f src/parser.c ]; then
-            cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
-              -I src src/parser.c
-          fi
+          cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
+            -I src src/parser.c src/scanner.c
+
+      - name: Verify grammar loads
+        run: |
+          emacs --batch \
+            --eval "(add-to-list 'treesit-extra-load-path \"~/.emacs.d/tree-sitter/\")" \
+            --eval "(require 'treesit)" \
+            --eval "(unless (treesit-ready-p 'unison t) (error \"Unison grammar failed to load; grammar tests would silently skip\"))"
 
       - name: Run ERT tests
         run: |
