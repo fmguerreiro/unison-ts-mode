@@ -28,7 +28,7 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 ## Requirements
 
 - Emacs 29+ (with native tree-sitter support)
-- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison) (auto-installed)
+- [Unison tree-sitter grammar](https://github.com/kylegoetz/tree-sitter-unison) (auto-installed)
 
 ## Installation
 
@@ -205,8 +205,9 @@ Ensure you're in a valid Unison codebase directory.
 If auto-install fails:
 
 ```sh
-git clone https://github.com/fmguerreiro/tree-sitter-unison.git
+git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
+git checkout 10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b
 
 # Determine shared library extension
 if [ "$(uname)" = "Darwin" ]; then soext="dylib"

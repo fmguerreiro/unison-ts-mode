@@ -32,14 +32,16 @@
                  (const :tag "Never auto-install" nil))
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-repository "https://github.com/fmguerreiro/tree-sitter-unison"
+(defcustom unison-ts-grammar-repository "https://github.com/kylegoetz/tree-sitter-unison"
   "Repository URL for the Unison tree-sitter grammar."
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision nil
+(defcustom unison-ts-grammar-revision "10365cc70ab2b2de85ea7ab35cf6b7636c36ce8b"
   "Git revision (branch, tag, or commit) for the grammar.
-If nil, uses the default branch."
+If nil, uses the default branch.
+Pinned to a verified upstream commit; bump after re-running the test
+suite against a newer revision."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
