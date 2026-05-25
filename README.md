@@ -28,7 +28,7 @@ Emacs major mode for [Unison](https://www.unison-lang.org/) using tree-sitter.
 ## Requirements
 
 - Emacs 29+ (with native tree-sitter support)
-- [Unison tree-sitter grammar](https://github.com/fmguerreiro/tree-sitter-unison) (auto-installed)
+- [Unison tree-sitter grammar](https://github.com/kylegoetz/tree-sitter-unison) (auto-installed)
 
 ## Installation
 
@@ -102,7 +102,7 @@ Navigate to functions, types, and abilities:
 
 Requires [UCM](https://www.unison-lang.org/docs/install-instructions/). UCM auto-starts as the inferior UCM (full TUI in a comint buffer) the first time eglot, lsp-mode, or the REPL needs it. The same process serves LSP, MCP, and the user-facing TUI, so there is no codebase-lock conflict.
 
-**Eglot (built-in Emacs 29+):**
+**Eglot (built-in):**
 
 ```elisp
 (with-eval-after-load 'unison-ts-mode
@@ -205,8 +205,9 @@ Ensure you're in a valid Unison codebase directory.
 If auto-install fails:
 
 ```sh
-git clone https://github.com/fmguerreiro/tree-sitter-unison.git
+git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
+git checkout 662bf52b966108cf299090a238cd6abfb65d5170
 
 # Determine shared library extension
 if [ "$(uname)" = "Darwin" ]; then soext="dylib"

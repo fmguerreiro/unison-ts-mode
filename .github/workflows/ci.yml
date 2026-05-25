@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        emacs: ['29.1', '29.4']
+        emacs: ['29.1', '29.4', '30.1', '30.2']
     steps:
       - uses: actions/checkout@v4
 
@@ -110,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        emacs: ['29.1', '29.4']
+        emacs: ['29.1', '29.4', '30.1', '30.2']
     steps:
       - uses: actions/checkout@v4
 
@@ -119,20 +119,22 @@ jobs:
         with:
           version: ${{ matrix.emacs }}
 
-      - name: Install tree-sitter CLI
-        run: |
-          npm install -g tree-sitter-cli
-
       - name: Build Unison grammar
         run: |
-          git clone --depth 1 https://github.com/fmguerreiro/tree-sitter-unison.git /tmp/tree-sitter-unison
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/kylegoetz/tree-sitter-unison.git /tmp/tree-sitter-unison
           cd /tmp/tree-sitter-unison
-          tree-sitter generate
+          git checkout 662bf52b966108cf299090a238cd6abfb65d5170
           mkdir -p ~/.emacs.d/tree-sitter
-          if [ -f src/parser.c ]; then
-            cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
-              -I src src/parser.c
-          fi
+          cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
+            -I src src/parser.c src/scanner.c
+
+      - name: Verify grammar loads
+        run: |
+          emacs --batch \
+            --eval "(add-to-list 'treesit-extra-load-path \"~/.emacs.d/tree-sitter/\")" \
+            --eval "(require 'treesit)" \
+            --eval "(unless (treesit-ready-p 'unison t) (error \"Unison grammar failed to load; grammar tests would silently skip\"))"
 
       - name: Run ERT tests
         run: |

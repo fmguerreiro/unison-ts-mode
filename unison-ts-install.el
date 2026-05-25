@@ -32,14 +32,20 @@
                  (const :tag "Never auto-install" nil))
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-repository "https://github.com/fmguerreiro/tree-sitter-unison"
+(defcustom unison-ts-grammar-repository "https://github.com/kylegoetz/tree-sitter-unison"
   "Repository URL for the Unison tree-sitter grammar."
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision nil
+(defcustom unison-ts-grammar-revision "662bf52b966108cf299090a238cd6abfb65d5170"
   "Git revision (branch, tag, or commit) for the grammar.
-If nil, uses the default branch."
+If nil, uses the default branch.
+Pinned to the last upstream commit whose generated parser runs on the
+older tree-sitter runtimes bundled with Emacs 29 and some Emacs 30
+builds.  Commit b2ae57b (the child of this pin) and later were
+regenerated with a newer tree-sitter CLI and misparse `let'/`handle'
+expressions on those runtimes; bump only after verifying a newer
+revision against Emacs 29 and 30."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
