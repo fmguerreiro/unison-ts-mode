@@ -278,16 +278,18 @@ Uses the UNISON_LSP_PORT env var when set, falling back to the
     unison-ts-lsp-port))
 
 (defun unison-ts-api--port-open-p (port)
-  "Return non-nil if PORT is accepting connections on localhost."
-  (condition-case nil
-      (let ((proc (make-network-process
-                   :name "unison-port-check"
-                   :host unison-ts-api-host
-                   :service port
-                   :nowait nil)))
-        (delete-process proc)
-        t)
-    (error nil)))
+  "Return non-nil if PORT is listening on localhost.
+Uses lsof (macOS/BSD) or ss (Linux) to check without opening a
+TCP connection, which poisons UCM's LSP listener."
+  (cond
+   ((executable-find "lsof")
+    (zerop (call-process "lsof" nil nil nil
+                         "-i" (format "TCP:%d" port)
+                         "-sTCP:LISTEN" "-P" "-n")))
+   ((executable-find "ss")
+    (zerop (call-process "ss" nil nil nil
+                         "-tln" (format "sport = :%d" port))))
+   (t nil)))
 
 (defun unison-ts-api--lsp-running-p ()
   "Return non-nil if UCM LSP server is running."
