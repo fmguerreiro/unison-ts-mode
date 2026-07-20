@@ -1695,47 +1695,84 @@ the parser routes to the 'add command."
     (should (eq (car parsed) 'add))
     (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
 
-;;; Grammar installation - fail-fast behavior
+;;; Grammar installation - fetch the pinned revision, verify availability
 
-(ert-deftest unison-ts-install/propagates-failure ()
-  "A clone/checkout/build failure must propagate, not return nil."
+(defun unison-ts-tests--make-git-fixture ()
+  "Create a throwaway git repo with two commits and return a plist.
+:dir is the repo path, :pinned is the SHA of the first commit and :tip
+the SHA of the second, so the pinned commit is not the branch tip."
+  (let* ((directory (make-temp-file "unison-ts-fixture-" t))
+         (run-git (lambda (&rest arguments)
+                    (apply #'process-lines "git" "-C" directory arguments))))
+    (funcall run-git "init" "--quiet")
+    (funcall run-git "config" "user.email" "test@example.com")
+    (funcall run-git "config" "user.name" "Test")
+    (funcall run-git "commit" "--quiet" "--allow-empty" "-m" "pinned")
+    (let ((pinned (car (funcall run-git "rev-parse" "HEAD"))))
+      (funcall run-git "commit" "--quiet" "--allow-empty" "-m" "tip")
+      (list :dir directory
+            :pinned pinned
+            :tip (car (funcall run-git "rev-parse" "HEAD"))))))
+
+(ert-deftest unison-ts-install/points-source-branch-at-pinned-revision ()
+  "The source branch resolves to the pinned SHA, not the tip.
+See `unison-ts--install-grammar' for why a raw SHA cannot name a
+treesit grammar source directly."
   (require 'unison-ts-install)
   (require 'cl-lib)
-  (let ((treesit-language-source-alist treesit-language-source-alist)
-        (unison-ts--install-prompted nil))
-    (cl-letf (((symbol-function 'treesit-install-language-grammar)
-               (lambda (&rest _) (error "clone failed"))))
-      (should-error (unison-ts-install-grammar) :type 'error))))
+  (let* ((fixture (unison-ts-tests--make-git-fixture))
+         (unison-ts-grammar-repository (plist-get fixture :dir))
+         (unison-ts-grammar-revision (plist-get fixture :pinned))
+         (captured nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'treesit-language-available-p)
+                     (lambda (&rest _) t))
+                    ((symbol-function 'treesit-install-language-grammar)
+                     (lambda (&rest _)
+                       (let* ((entry (assq 'unison treesit-language-source-alist))
+                              (directory (nth 1 entry))
+                              (branch (nth 2 entry)))
+                         (setq captured
+                               (list :branch branch
+                                     :resolved (car (process-lines
+                                                     "git" "-C" directory
+                                                     "rev-parse" branch))))))))
+            (should (eq (unison-ts-install-grammar) t)))
+          (should (equal (plist-get captured :branch)
+                         unison-ts--grammar-revision-branch))
+          (should (equal (plist-get captured :resolved) (plist-get fixture :pinned)))
+          (should-not (equal (plist-get captured :resolved)
+                             (plist-get fixture :tip))))
+      (delete-directory (plist-get fixture :dir) t))))
 
-(ert-deftest unison-ts-install/error-names-repository ()
-  "The propagated error names the repository and revision for context."
+(ert-deftest unison-ts-install/reports-fetch-error-and-returns-nil ()
+  "A failed fetch is caught, warned about once with the git error, and returns nil.
+Emacs demotes treesit's own failures to warnings, but a fetch failure
+from `unison-ts--run-git' signals, so this exercises the caught-error
+warning path."
   (require 'unison-ts-install)
   (require 'cl-lib)
-  (let ((treesit-language-source-alist treesit-language-source-alist)
-        (unison-ts--install-prompted nil)
-        (unison-ts-grammar-repository "https://example.invalid/grammar")
-        (unison-ts-grammar-revision "abc123"))
-    (cl-letf (((symbol-function 'treesit-install-language-grammar)
-               (lambda (&rest _) (error "clone failed"))))
-      (let ((signaled-message
-             (condition-case err
-                 (progn (unison-ts-install-grammar) nil)
-               (error (error-message-string err)))))
-        (should (equal
-                 signaled-message
-                 (concat "Failed to install Unison grammar from "
-                         "https://example.invalid/grammar (revision abc123): "
-                         "clone failed")))))))
-
-(ert-deftest unison-ts-install/returns-t-on-success ()
-  "A successful install returns t."
-  (require 'unison-ts-install)
-  (require 'cl-lib)
-  (let ((treesit-language-source-alist treesit-language-source-alist)
-        (unison-ts--install-prompted nil))
-    (cl-letf (((symbol-function 'treesit-install-language-grammar)
-               (lambda (&rest _) t)))
-      (should (eq (unison-ts-install-grammar) t)))))
+  ;; Load warnings.el before the stub: display-warning is an autoload, and
+  ;; resolving it mid-call replaces the stub with the real function.
+  (require 'warnings)
+  (let ((unison-ts-grammar-repository "/unison-ts/does-not-exist")
+        (unison-ts-grammar-revision "662bf52")
+        (warned nil)
+        (level nil))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &optional severity &rest _)
+                 (setq warned message level severity))))
+      (should (eq (unison-ts-install-grammar) nil)))
+    (should (eq level :error))
+    ;; git's stderr is version- and locale-dependent, so match the stable
+    ;; leading text rather than the full message.
+    (should (string-prefix-p
+             (concat "Failed to install Unison grammar from "
+                     "/unison-ts/does-not-exist (revision 662bf52): Git fetch")
+             warned))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
