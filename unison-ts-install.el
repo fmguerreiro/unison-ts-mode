@@ -64,19 +64,17 @@ revision against Emacs 29 and 30."
     (with-temp-buffer
       (let ((status (apply #'call-process "git" nil t nil arguments)))
         (unless (eq status 0)
-          (error "git %s failed: %s"
+          (error "Git %s failed: %s"
                  (string-join arguments " ")
                  (string-trim (buffer-string))))))))
 
 (defun unison-ts--install-grammar ()
   "Clone the pinned grammar and install it into tree-sitter.
-Emacs hands `unison-ts-grammar-revision' to `git clone -b', which
-resolves only branch and tag names, so the raw commit SHA the grammar
-is pinned to can never be cloned that way.  Clone the repository into a
-temporary directory, point a local branch at the revision, and register
-that directory and branch as the grammar source.  Emacs 30 checks the
-branch out in place; Emacs 29 clones it with `-b'; both land on the
-pinned commit.
+`git clone -b' resolves only branch and tag names, never a raw commit
+SHA, so this fetches the revision into a temporary directory and points
+a local branch at it before registering that branch as the source.  The
+branch exists for Emacs 29, which clones the source with `-b'; Emacs 30
+runs `git checkout' in place and would take the SHA directly.
 
 With no revision there is nothing to pin, so treesit clones the
 repository's default branch directly."
@@ -87,14 +85,15 @@ repository's default branch directly."
     (let ((clone-directory (make-temp-file "unison-ts-grammar-" t)))
       (unwind-protect
           (progn
-            ;; Full clone, not --depth 1: the pinned revision predates the
-            ;; default-branch tip, so a shallow clone would not contain the
-            ;; object `git branch' needs to point at.
-            (unison-ts--run-git clone-directory
-                                "clone" unison-ts-grammar-repository ".")
+            ;; Shallow-fetch just the pinned commit; the full history is
+            ;; ~20x the download for one commit.
+            (unison-ts--run-git clone-directory "init" "--quiet")
+            (unison-ts--run-git clone-directory "remote" "add" "origin"
+                                unison-ts-grammar-repository)
+            (unison-ts--run-git clone-directory "fetch" "--quiet" "--depth" "1"
+                                "origin" unison-ts-grammar-revision)
             (unison-ts--run-git clone-directory "branch"
-                                unison-ts--grammar-revision-branch
-                                unison-ts-grammar-revision)
+                                unison-ts--grammar-revision-branch "FETCH_HEAD")
             (let ((treesit-language-source-alist
                    (list (list 'unison clone-directory
                                unison-ts--grammar-revision-branch))))
@@ -117,7 +116,9 @@ that the install call signaled or returned non-nil."
         (progn
           (message "Unison grammar installed successfully")
           t)
-      (message "Failed to install Unison grammar from %s%s%s"
+      (display-warning
+       'unison-ts
+       (format "Failed to install Unison grammar from %s%s%s"
                unison-ts-grammar-repository
                (if unison-ts-grammar-revision
                    (format " (revision %s)" unison-ts-grammar-revision)
@@ -125,6 +126,7 @@ that the install call signaled or returned non-nil."
                (if install-error
                    (format ": %s" install-error)
                  "; see the tree-sitter error in the *Warnings* buffer"))
+       :error)
       nil)))
 
 (defun unison-ts-ensure-grammar ()
