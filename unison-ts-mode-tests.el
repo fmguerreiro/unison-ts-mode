@@ -1726,7 +1726,9 @@ treesit grammar source directly."
          (captured nil))
     (unwind-protect
         (progn
-          (cl-letf (((symbol-function 'treesit-install-language-grammar)
+          (cl-letf (((symbol-function 'treesit-language-available-p)
+                     (lambda (&rest _) t))
+                    ((symbol-function 'treesit-install-language-grammar)
                      (lambda (&rest _)
                        (let* ((entry (assq 'unison treesit-language-source-alist))
                               (directory (nth 1 entry))
@@ -1736,7 +1738,7 @@ treesit grammar source directly."
                                      :resolved (car (process-lines
                                                      "git" "-C" directory
                                                      "rev-parse" branch))))))))
-            (unison-ts--install-grammar))
+            (should (eq (unison-ts-install-grammar) t)))
           (should (equal (plist-get captured :branch)
                          unison-ts--grammar-revision-branch))
           (should (equal (plist-get captured :resolved) (plist-get fixture :pinned)))
@@ -1744,26 +1746,28 @@ treesit grammar source directly."
                              (plist-get fixture :tip))))
       (delete-directory (plist-get fixture :dir) t))))
 
-(ert-deftest unison-ts-install/reports-clone-error-and-returns-nil ()
+(ert-deftest unison-ts-install/reports-fetch-error-and-returns-nil ()
   "A failed fetch is caught, warned about once with the git error, and returns nil.
 Emacs demotes treesit's own failures to warnings, but a fetch failure
 from `unison-ts--run-git' signals, so this exercises the caught-error
 warning path."
   (require 'unison-ts-install)
   (require 'cl-lib)
+  (require 'warnings)
   (let ((unison-ts-grammar-repository "/unison-ts/does-not-exist")
-        (unison-ts-grammar-revision "662bf52"))
-    (when (get-buffer "*Warnings*")
-      (kill-buffer "*Warnings*"))
+        (unison-ts-grammar-revision "662bf52")
+        (warned nil))
     (cl-letf (((symbol-function 'treesit-language-available-p)
-               (lambda (&rest _) nil)))
+               (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &rest _) (setq warned message))))
       (should (eq (unison-ts-install-grammar) nil)))
     ;; git's stderr is version- and locale-dependent, so match the stable
     ;; leading text rather than the full message.
     (should (string-match-p
-             (concat "Error (unison-ts): Failed to install Unison grammar from "
+             (concat "\\`Failed to install Unison grammar from "
                      "/unison-ts/does-not-exist (revision 662bf52): Git fetch")
-             (with-current-buffer "*Warnings*" (buffer-string))))))
+             warned))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
