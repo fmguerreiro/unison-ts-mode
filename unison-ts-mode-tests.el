@@ -1804,5 +1804,128 @@ message path."
                 line))
              logged))))
 
+;;; Grammar installation - session latch after decline / failure
+;;
+;; These drive the real `unison-ts-install-grammar' and stub only its
+;; external boundary (`treesit-install-language-grammar' installs,
+;; `treesit-language-available-p' confirms), matching the convention of
+;; the availability tests above.  `unison-ts-grammar-revision' is nil so
+;; install takes the direct path and never shells out to git.
+
+(ert-deftest unison-ts-install/does-not-reprompt-after-decline ()
+  "An explicit decline latches the prompt off for the rest of the session."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'prompt)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (prompts 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (error "install must not run after a decline"))))
+      (should-not (unison-ts-ensure-grammar))
+      (should-not (unison-ts-ensure-grammar))
+      (should (= prompts 1)))))
+
+(ert-deftest unison-ts-install/reprompts-after-a-failed-install ()
+  "A failed install does not latch; see `unison-ts--install-declined'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'prompt)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (prompts 0)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) t))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (should-not (unison-ts-ensure-grammar))
+      (should (= prompts 2))
+      (should (= installs 2)))))
+
+(ert-deftest unison-ts-install/does-not-reattempt-auto-install-after-failure ()
+  "Auto mode latches off after a failed install; see `unison-ts--install-failed'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'auto)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (should-not (unison-ts-ensure-grammar))
+      (should (= installs 1)))))
+
+(ert-deftest unison-ts-install/auto-install-success-returns-t ()
+  "A successful auto install reports availability without latching anything."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'auto)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (installed nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (setq installed t)))
+              ((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) installed)))
+      (should (eq (unison-ts-ensure-grammar) t))
+      (should-not unison-ts--install-failed))))
+
+(ert-deftest unison-ts-install/failure-message-names-the-manual-retry ()
+  "A failed install points the user at the M-x retry command.
+The hint is the only place an `auto'-mode user, whose buffer degrades
+silently once `unison-ts--install-failed' latches, learns how to retry
+after fixing the toolchain."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-revision nil)
+        (logged nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'message)
+               (lambda (format-string &rest args)
+                 (push (apply #'format format-string args) logged))))
+      (should-not (unison-ts-install-grammar)))
+    (should (seq-some
+             (lambda (line)
+               (string-match-p "M-x unison-ts-install-grammar" line))
+             logged))))
+
+(ert-deftest unison-ts-install/decline-suppresses-later-auto-install ()
+  "A decline latches across modes; see `unison-ts--install-declined'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'prompt)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (setq unison-ts-grammar-install 'auto)
+      (should-not (unison-ts-ensure-grammar))
+      (should (= installs 0)))))
+
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
