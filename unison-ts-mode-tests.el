@@ -1753,6 +1753,9 @@ from `unison-ts--run-git' signals, so this exercises the caught-error
 warning path."
   (require 'unison-ts-install)
   (require 'cl-lib)
+  ;; Load warnings.el before the stub: display-warning is an autoload, and
+  ;; resolving it mid-call replaces the stub with the real function.
+  (require 'warnings)
   (let ((unison-ts-grammar-repository "/unison-ts/does-not-exist")
         (unison-ts-grammar-revision "662bf52")
         (warned nil)
