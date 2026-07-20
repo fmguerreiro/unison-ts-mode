@@ -78,7 +78,10 @@ revision against Emacs 29 and 30."
 SHA, so this fetches the revision into a temporary directory and points
 a local branch at it before registering that branch as the source.  The
 branch exists for Emacs 29, which clones the source with `-b'; Emacs 30
-runs `git checkout' in place and would take the SHA directly."
+runs `git checkout' in place and would take the SHA directly.
+
+With no revision there is nothing to pin, so treesit clones the
+repository's default branch directly."
   (if (null unison-ts-grammar-revision)
       (let ((treesit-language-source-alist
              (list (list 'unison unison-ts-grammar-repository))))

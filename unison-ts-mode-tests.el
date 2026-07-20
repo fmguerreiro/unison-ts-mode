@@ -1695,7 +1695,7 @@ the parser routes to the 'add command."
     (should (eq (car parsed) 'add))
     (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
 
-;;; Grammar installation - clone the pinned revision, verify availability
+;;; Grammar installation - fetch the pinned revision, verify availability
 
 (defun unison-ts-tests--make-git-fixture ()
   "Create a throwaway git repo with two commits and return a plist.
@@ -1753,19 +1753,21 @@ from `unison-ts--run-git' signals, so this exercises the caught-error
 warning path."
   (require 'unison-ts-install)
   (require 'cl-lib)
-  (require 'warnings)
   (let ((unison-ts-grammar-repository "/unison-ts/does-not-exist")
         (unison-ts-grammar-revision "662bf52")
-        (warned nil))
+        (warned nil)
+        (level nil))
     (cl-letf (((symbol-function 'treesit-language-available-p)
                (lambda (&rest _) nil))
               ((symbol-function 'display-warning)
-               (lambda (_type message &rest _) (setq warned message))))
+               (lambda (_type message &optional severity &rest _)
+                 (setq warned message level severity))))
       (should (eq (unison-ts-install-grammar) nil)))
+    (should (eq level :error))
     ;; git's stderr is version- and locale-dependent, so match the stable
     ;; leading text rather than the full message.
-    (should (string-match-p
-             (concat "\\`Failed to install Unison grammar from "
+    (should (string-prefix-p
+             (concat "Failed to install Unison grammar from "
                      "/unison-ts/does-not-exist (revision 662bf52): Git fetch")
              warned))))
 
