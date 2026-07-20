@@ -1695,47 +1695,114 @@ the parser routes to the 'add command."
     (should (eq (car parsed) 'add))
     (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
 
-;;; Grammar installation - fail-fast behavior
+;;; Grammar installation - clone the pinned revision, verify availability
 
-(ert-deftest unison-ts-install/propagates-failure ()
-  "A clone/checkout/build failure must propagate, not return nil."
+(defun unison-ts-tests--make-git-fixture ()
+  "Create a throwaway git repo with two commits and return a plist.
+:dir is the repo path; :pinned is the SHA of the first commit, whose
+`marker' file reads \"pinned\".  The second commit changes `marker' to
+\"tip\", so the pinned commit is not the branch tip."
+  (let* ((directory (make-temp-file "unison-ts-fixture-" t))
+         (run-git (lambda (&rest arguments)
+                    (apply #'process-lines "git" "-C" directory arguments))))
+    (funcall run-git "init" "--quiet")
+    (funcall run-git "config" "user.email" "test@example.com")
+    (funcall run-git "config" "user.name" "Test")
+    (with-temp-file (expand-file-name "marker" directory) (insert "pinned"))
+    (funcall run-git "add" "marker")
+    (funcall run-git "commit" "--quiet" "-m" "pinned")
+    (let ((pinned (car (funcall run-git "rev-parse" "HEAD"))))
+      (with-temp-file (expand-file-name "marker" directory) (insert "tip"))
+      (funcall run-git "add" "marker")
+      (funcall run-git "commit" "--quiet" "-m" "tip")
+      (list :dir directory :pinned pinned))))
+
+(ert-deftest unison-ts-install/points-source-branch-at-pinned-revision ()
+  "The helper registers a local source branch resolving to the pinned SHA.
+Emacs 29 clones that branch with `-b' and Emacs 30 checks it out in
+place, both landing on the pinned commit; a raw SHA in the alist would
+break the Emacs 29 clone path, and using the tip would build the wrong
+grammar."
   (require 'unison-ts-install)
   (require 'cl-lib)
-  (let ((treesit-language-source-alist treesit-language-source-alist)
-        (unison-ts--install-prompted nil))
-    (cl-letf (((symbol-function 'treesit-install-language-grammar)
-               (lambda (&rest _) (error "clone failed"))))
-      (should-error (unison-ts-install-grammar) :type 'error))))
+  (let* ((fixture (unison-ts-tests--make-git-fixture))
+         (unison-ts-grammar-repository (plist-get fixture :dir))
+         (unison-ts-grammar-revision (plist-get fixture :pinned))
+         (captured nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'treesit-install-language-grammar)
+                     (lambda (&rest _)
+                       (let* ((entry (assq 'unison treesit-language-source-alist))
+                              (directory (nth 1 entry))
+                              (branch (nth 2 entry)))
+                         (setq captured
+                               (list :branch branch
+                                     :resolved (car (process-lines
+                                                     "git" "-C" directory
+                                                     "rev-parse" branch))
+                                     :tip (car (process-lines
+                                                "git" "-C" directory
+                                                "rev-parse" "HEAD"))))))))
+            (unison-ts--install-grammar))
+          (should (equal (plist-get captured :branch)
+                         unison-ts--grammar-revision-branch))
+          (should (equal (plist-get captured :resolved) (plist-get fixture :pinned)))
+          (should-not (equal (plist-get captured :resolved)
+                             (plist-get captured :tip))))
+      (delete-directory (plist-get fixture :dir) t))))
 
-(ert-deftest unison-ts-install/error-names-repository ()
-  "The propagated error names the repository and revision for context."
+(ert-deftest unison-ts-install/returns-t-when-grammar-available ()
+  "Install returns t when the grammar is available afterward.
+Revision nil takes the direct path and the stubbed install is a no-op,
+so the return value is driven purely by availability."
   (require 'unison-ts-install)
   (require 'cl-lib)
-  (let ((treesit-language-source-alist treesit-language-source-alist)
-        (unison-ts--install-prompted nil)
-        (unison-ts-grammar-repository "https://example.invalid/grammar")
-        (unison-ts-grammar-revision "abc123"))
+  (let ((unison-ts-grammar-revision nil))
     (cl-letf (((symbol-function 'treesit-install-language-grammar)
-               (lambda (&rest _) (error "clone failed"))))
-      (let ((signaled-message
-             (condition-case err
-                 (progn (unison-ts-install-grammar) nil)
-               (error (error-message-string err)))))
-        (should (equal
-                 signaled-message
-                 (concat "Failed to install Unison grammar from "
-                         "https://example.invalid/grammar (revision abc123): "
-                         "clone failed")))))))
-
-(ert-deftest unison-ts-install/returns-t-on-success ()
-  "A successful install returns t."
-  (require 'unison-ts-install)
-  (require 'cl-lib)
-  (let ((treesit-language-source-alist treesit-language-source-alist)
-        (unison-ts--install-prompted nil))
-    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-language-available-p)
                (lambda (&rest _) t)))
       (should (eq (unison-ts-install-grammar) t)))))
+
+(ert-deftest unison-ts-install/returns-nil-when-grammar-unavailable ()
+  "Install returns nil when the grammar is unavailable afterward.
+This is the demote-to-warning case: the install call completes without
+signaling, yet no grammar was produced."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-revision nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil)))
+      (should (eq (unison-ts-install-grammar) nil)))))
+
+(ert-deftest unison-ts-install/reports-clone-error-and-returns-nil ()
+  "A failed clone is caught, reported once with the git error, and returns nil.
+Emacs demotes treesit's own failures to warnings, but a clone failure
+from `unison-ts--run-git' signals, so this exercises the caught-error
+message path."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-repository "/unison-ts/does-not-exist")
+        (unison-ts-grammar-revision "662bf52")
+        (logged nil))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'message)
+               (lambda (format-string &rest args)
+                 (push (apply #'format format-string args) logged))))
+      (should (eq (unison-ts-install-grammar) nil)))
+    ;; git's stderr is version- and locale-dependent, so match the stable
+    ;; leading text rather than the full message.
+    (should (seq-some
+             (lambda (line)
+               (string-match-p
+                (concat "\\`Failed to install Unison grammar from "
+                        "/unison-ts/does-not-exist (revision 662bf52): git clone")
+                line))
+             logged))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
