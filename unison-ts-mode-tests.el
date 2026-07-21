@@ -1797,6 +1797,7 @@ warning path."
   "A failed install does not latch; see `unison-ts--install-declined'."
   (require 'unison-ts-install)
   (require 'cl-lib)
+  (require 'warnings)
   (let ((unison-ts-grammar-install 'prompt)
         (unison-ts-grammar-revision nil)
         (unison-ts--install-declined nil)
@@ -1807,6 +1808,8 @@ warning path."
                (lambda (&rest _) nil))
               ((symbol-function 'y-or-n-p)
                (lambda (&rest _) (cl-incf prompts) t))
+              ((symbol-function 'display-warning)
+               (lambda (&rest _) nil))
               ((symbol-function 'treesit-install-language-grammar)
                (lambda (&rest _) (cl-incf installs))))
       (should-not (unison-ts-ensure-grammar))
@@ -1818,12 +1821,15 @@ warning path."
   "Auto mode latches off after a failed install; see `unison-ts--install-failed'."
   (require 'unison-ts-install)
   (require 'cl-lib)
+  (require 'warnings)
   (let ((unison-ts-grammar-install 'auto)
         (unison-ts-grammar-revision nil)
         (unison-ts--install-declined nil)
         (unison-ts--install-failed nil)
         (installs 0))
     (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
                (lambda (&rest _) nil))
               ((symbol-function 'treesit-install-language-grammar)
                (lambda (&rest _) (cl-incf installs))))
@@ -1849,9 +1855,8 @@ warning path."
 
 (ert-deftest unison-ts-install/failure-warning-names-the-manual-retry ()
   "A failed install points the user at the M-x retry command.
-The hint is the only place an `auto'-mode user, whose buffer degrades
-silently once `unison-ts--install-failed' latches, learns how to retry
-after fixing the toolchain."
+The only place an `auto'-mode user, who otherwise degrades silently,
+learns how to retry after fixing the toolchain."
   (require 'unison-ts-install)
   (require 'cl-lib)
   ;; Load warnings.el before the stub: display-warning is an autoload, and
@@ -1887,6 +1892,33 @@ after fixing the toolchain."
       (setq unison-ts-grammar-install 'auto)
       (should-not (unison-ts-ensure-grammar))
       (should (= installs 0)))))
+
+(ert-deftest unison-ts-install/auto-failure-does-not-suppress-later-prompt ()
+  "The auto-failure latch is auto-only, unlike a decline; see
+`unison-ts--install-declined' and `unison-ts--install-failed'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (require 'warnings)
+  (let ((unison-ts-grammar-install 'auto)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (prompts 0)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) t))
+              ((symbol-function 'display-warning)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (should unison-ts--install-failed)
+      (setq unison-ts-grammar-install 'prompt)
+      (should-not (unison-ts-ensure-grammar))
+      (should (= prompts 1))
+      (should (= installs 2)))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here

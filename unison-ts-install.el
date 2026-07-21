@@ -69,8 +69,8 @@ Only consulted when `unison-ts-grammar-install' is `auto'.  It stops an
 unattended clone+compile from repeating on every .u buffer opened
 against a persistently broken toolchain; retry with
 \\[unison-ts-install-grammar] after fixing the toolchain.  Never reset:
-once install succeeds the availability check in `unison-ts-ensure-grammar'
-short-circuits, so clearing this flag would be dead code.")
+a successful install short-circuits `unison-ts-ensure-grammar' before
+this flag is checked again.")
 
 (defconst unison-ts--grammar-revision-branch "unison-ts-pinned-revision"
   "Local branch name pointed at `unison-ts-grammar-revision' during install.")
@@ -155,6 +155,8 @@ installation was declined, disabled, or failed."
    ((treesit-language-available-p 'unison)
     t)
 
+   ;; Must precede the mode arms so a decline suppresses a later
+   ;; auto-install too; see `unison-ts--install-declined'.
    (unison-ts--install-declined
     nil)
 
