@@ -56,8 +56,21 @@ revision against Emacs 29 and 30."
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
 
-(defvar unison-ts--install-prompted nil
-  "Whether we've already prompted for installation this session.")
+(defvar unison-ts--install-declined nil
+  "Non-nil once the user declined the install prompt this session.
+Set only on an explicit \"no\".  Consulted in every mode, so it also
+suppresses a later auto-install this session; a failed install does not
+set it, leaving the user free to be asked again or to retry with
+\\[unison-ts-install-grammar].")
+
+(defvar unison-ts--install-failed nil
+  "Non-nil once an automatic install attempt failed this session.
+Only consulted when `unison-ts-grammar-install' is `auto'.  It stops an
+unattended clone+compile from repeating on every .u buffer opened
+against a persistently broken toolchain; retry with
+\\[unison-ts-install-grammar] after fixing the toolchain.  Never reset:
+a successful install short-circuits `unison-ts-ensure-grammar' before
+this flag is checked again.")
 
 (defconst unison-ts--grammar-revision-branch "unison-ts-pinned-revision"
   "Local branch name pointed at `unison-ts-grammar-revision' during install.")
@@ -121,7 +134,9 @@ that the install call signaled or returned non-nil."
           t)
       (display-warning
        'unison-ts
-       (format "Failed to install Unison grammar from %s%s%s"
+       (format (concat "Failed to install Unison grammar from %s%s%s.  "
+                       "Retry with M-x unison-ts-install-grammar after "
+                       "fixing the toolchain.")
                unison-ts-grammar-repository
                (if unison-ts-grammar-revision
                    (format " (revision %s)" unison-ts-grammar-revision)
@@ -140,17 +155,23 @@ installation was declined, disabled, or failed."
    ((treesit-language-available-p 'unison)
     t)
 
-   (unison-ts--install-prompted
+   ;; Must precede the mode arms so a decline suppresses a later
+   ;; auto-install too; see `unison-ts--install-declined'.
+   (unison-ts--install-declined
     nil)
 
    ((eq unison-ts-grammar-install 'auto)
-    (setq unison-ts--install-prompted t)
-    (unison-ts-install-grammar))
+    ;; See `unison-ts--install-failed' for why a failure latches here.
+    (unless unison-ts--install-failed
+      (or (unison-ts-install-grammar)
+          (progn (setq unison-ts--install-failed t) nil))))
 
    ((eq unison-ts-grammar-install 'prompt)
-    (setq unison-ts--install-prompted t)
-    (when (y-or-n-p "Install Unison grammar for syntax highlighting? ")
-      (unison-ts-install-grammar)))
+    ;; Only an explicit decline latches; see `unison-ts--install-declined'.
+    (if (y-or-n-p "Install Unison grammar for syntax highlighting? ")
+        (unison-ts-install-grammar)
+      (setq unison-ts--install-declined t)
+      nil))
 
    (t
     (message "Unison grammar not found. Set unison-ts-grammar-install to enable auto-install.")
