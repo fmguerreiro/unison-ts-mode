@@ -1329,6 +1329,25 @@ at `~/.unison/' so the walk always terminates at home."
   (let ((unison-ts-lsp-port 59998))
     (should-not (unison-ts-api--lsp-running-p))))
 
+(ert-deftest unison-ts-api/port-open-p-detects-listener ()
+  "`unison-ts-api--port-open-p' must return non-nil only for a port
+with a live listener.  Regression guard for gh#31 (see that
+function's docstring for the ss false-positive it guards against)."
+  (require 'unison-ts-repl)
+  (unless (or (executable-find "lsof") (executable-find "ss"))
+    (ert-skip "neither lsof nor ss available"))
+  (let* ((port 59771)
+         (server (make-network-process
+                  :name "unison-test-listener"
+                  :server t
+                  :host "127.0.0.1"
+                  :service port
+                  :family 'ipv4)))
+    (unwind-protect
+        (should (unison-ts-api--port-open-p port))
+      (delete-process server))
+    (should-not (unison-ts-api--port-open-p port))))
+
 (ert-deftest unison-ts-api/repl-start-checks-lsp ()
   "REPL start should check for LSP conflicts."
   (require 'unison-ts-repl)

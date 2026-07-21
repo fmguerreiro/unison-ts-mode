@@ -256,11 +256,6 @@ Signals an error if no project context is found."
 
 ;;; UCM Headless Detection
 
-(defcustom unison-ts-api-host "localhost"
-  "Host for the UCM codebase server API."
-  :type 'string
-  :group 'unison-ts-repl)
-
 (defcustom unison-ts-lsp-port 5757
   "Port for the UCM LSP server.
 This is the default port UCM uses for LSP (language server protocol).
@@ -277,17 +272,28 @@ Uses the UNISON_LSP_PORT env var when set, falling back to the
       (string-to-number env)
     unison-ts-lsp-port))
 
+(defun unison-ts-api--command-prints-p (program &rest args)
+  "Run PROGRAM with ARGS and return non-nil if it prints any stdout.
+Stderr is discarded so a tool diagnostic (permission warning, an
+unknown-flag error on an older ss) cannot masquerade as output."
+  (with-temp-buffer
+    (apply #'call-process program nil (list t nil) nil args)
+    (> (buffer-size) 0)))
+
 (defun unison-ts-api--port-open-p (port)
-  "Return non-nil if PORT is accepting connections on localhost."
-  (condition-case nil
-      (let ((proc (make-network-process
-                   :name "unison-port-check"
-                   :host unison-ts-api-host
-                   :service port
-                   :nowait nil)))
-        (delete-process proc)
-        t)
-    (error nil)))
+  "Return non-nil if PORT has a live listener on the local machine.
+Uses lsof (macOS/BSD) or ss (Linux) to check without opening a TCP
+connection, which poisons UCM's LSP listener.  Both branches
+require a matching line of stdout, not merely a zero exit: ss exits
+0 for any successful query even when nothing is listening."
+  (cond
+   ((executable-find "lsof")
+    (unison-ts-api--command-prints-p
+     "lsof" "-i" (format "TCP:%d" port) "-sTCP:LISTEN" "-P" "-n"))
+   ((executable-find "ss")
+    (unison-ts-api--command-prints-p
+     "ss" "-tlnH" (format "sport = :%d" port)))
+   (t nil)))
 
 (defun unison-ts-api--lsp-running-p ()
   "Return non-nil if UCM LSP server is running."
