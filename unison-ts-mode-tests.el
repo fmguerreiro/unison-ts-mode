@@ -168,6 +168,33 @@
     (goto-char (point-min))
     (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))))
 
+(ert-deftest unison-ts-font-lock/comment-trailing-after-term ()
+  "Trailing (end-of-line) comments should be highlighted.
+Grammar revisions before 28be881 lex a trailing `--' as a symbolic
+operator and the comment text as identifiers, so the comment renders as
+code and the rest of the file parses as an error."
+  (unison-ts-mode-tests--with-buffer "x = 1 -- trailing comment"
+    (goto-char (point-min))
+    (search-forward "--")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))))
+
+(ert-deftest unison-ts-font-lock/comment-trailing-in-ability ()
+  "Trailing comments inside an ability declaration should be highlighted.
+This is the shape that regressed first: the mis-lexed `--' derails the
+remainder of the declaration."
+  (unison-ts-mode-tests--with-buffer
+      "ability Git where\n  status : [Text]    -- uncommitted paths\n  currentBranch : Text"
+    (goto-char (point-min))
+    (search-forward "--")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))
+    ;; The declaration after the comment must still parse as a declaration.
+    (goto-char (point-min))
+    (search-forward "currentBranch")
+    (goto-char (match-beginning 0))
+    (should-not (eq (get-text-property (point) 'face) 'font-lock-warning-face))))
+
 (ert-deftest unison-ts-font-lock/comment-block ()
   "Block comments ({- -}) should be highlighted."
   (unison-ts-mode-tests--with-buffer "{- this is a block comment -}"
@@ -389,8 +416,11 @@
     (should (eq (unison-ts-mode-tests--face-at-string "with") 'font-lock-keyword-face))))
 
 (ert-deftest unison-ts-font-lock/handle-with ()
-  "Handle/with keywords should be highlighted."
-  (unison-ts-mode-tests--with-buffer "x = handle foo with cases\n  { pure y } -> y"
+  "Handle/with keywords should be highlighted.
+`pure' is not a Unison keyword, so the pure case of a handler is spelled
+`{ y } -> y'.  UCM rejects `{ pure y }' with \"I couldn't resolve any of
+these names: pure\", so this fixture must not use that form."
+  (unison-ts-mode-tests--with-buffer "x = handle foo with cases\n  { y } -> y"
     (should (eq (unison-ts-mode-tests--face-at-string "handle") 'font-lock-keyword-face))
     (should (eq (unison-ts-mode-tests--face-at-string "with") 'font-lock-keyword-face))))
 

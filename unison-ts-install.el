@@ -43,15 +43,16 @@ fetches from any host."
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision "662bf52b966108cf299090a238cd6abfb65d5170"
+(defcustom unison-ts-grammar-revision "28be881547089225cd5253ead9db0e0d0e2e7a1f"
   "Git revision (branch, tag, or commit) for the grammar.
 If nil, uses the default branch.
-Pinned to the last upstream commit whose generated parser runs on the
-older tree-sitter runtimes bundled with Emacs 29 and some Emacs 30
-builds.  Commit b2ae57b (the child of this pin) and later were
-regenerated with a newer tree-sitter CLI and misparse `let'/`handle'
-expressions on those runtimes; bump only after verifying a newer
-revision against Emacs 29 and 30."
+Pinned to upstream commit 28be881, which fixes trailing (end-of-line)
+comments.  Revisions before it lex a trailing `--' as a symbolic
+operator and the comment text as identifiers, derailing the parse for
+the rest of the file.
+When bumping, verify against Emacs 29 and 30 and re-run the ERT suite;
+keep this in sync with the revision pinned in .github/workflows/ci.yml
+and the manual build instructions in README.md."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
