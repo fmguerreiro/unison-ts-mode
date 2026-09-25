@@ -50,9 +50,12 @@ Pinned to upstream commit 28be881, which fixes trailing (end-of-line)
 comments.  Revisions before it lex a trailing `--' as a symbolic
 operator and the comment text as identifiers, derailing the parse for
 the rest of the file.
-When bumping, verify against Emacs 29 and 30 and re-run the ERT suite;
-keep this in sync with the revision pinned in .github/workflows/ci.yml
-and the manual build instructions in README.md."
+This pin descends from b2ae57b, where upstream regenerated the parser
+with a newer tree-sitter CLI.  Later revisions in that series misparse
+`let'/`handle' expressions: at 10365cc the handle-with and keyword-let
+tests fail.  The Emacs 29 CI jobs are the gate on any bump, and the
+revision is repeated in .github/workflows/ci.yml, README.md and
+CLAUDE.md."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)

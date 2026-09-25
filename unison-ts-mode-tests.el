@@ -181,19 +181,25 @@ code and the rest of the file parses as an error."
 
 (ert-deftest unison-ts-font-lock/comment-trailing-in-ability ()
   "Trailing comments inside an ability declaration should be highlighted.
-This is the shape that regressed first: the mis-lexed `--' derails the
-remainder of the declaration."
+This is the shape that regressed first: the mis-lexed `--' and the words
+after it rendered as code."
   (unison-ts-mode-tests--with-buffer
       "ability Git where\n  status : [Text]    -- uncommitted paths\n  currentBranch : Text"
     (goto-char (point-min))
     (search-forward "--")
     (goto-char (match-beginning 0))
     (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))
-    ;; The declaration after the comment must still parse as a declaration.
+    ;; The comment text is comment, not code: the mis-lex turned it into
+    ;; identifiers.
+    (goto-char (point-min))
+    (search-forward "uncommitted")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))
+    ;; The operation after the comment is still an operation.
     (goto-char (point-min))
     (search-forward "currentBranch")
     (goto-char (match-beginning 0))
-    (should-not (eq (get-text-property (point) 'face) 'font-lock-warning-face))))
+    (should (eq (get-text-property (point) 'face) 'font-lock-function-name-face))))
 
 (ert-deftest unison-ts-font-lock/comment-block ()
   "Block comments ({- -}) should be highlighted."
@@ -683,10 +689,16 @@ these names: pure\", so this fixture must not use that form."
     (goto-char (point-min))
     (search-forward "(a,")
     (backward-char 2)
-    (let ((face (get-text-property (point) 'face)))
-      (should (or (eq face 'font-lock-variable-name-face)
-                  (eq face 'font-lock-function-name-face)
-                  (null face))))))
+    (should (eq (get-text-property (point) 'face) 'font-lock-variable-name-face))))
+
+(ert-deftest unison-ts-font-lock/let-tuple-destructuring-nested ()
+  "Nested tuple patterns should highlight binders at every depth."
+  (unison-ts-mode-tests--with-buffer "foo =\n  let\n    (a, (b, c)) = (1, (2, 3))\n    a"
+    (dolist (name '("a" "b" "c"))
+      (goto-char (point-min))
+      (re-search-forward (concat "\\_<" name "\\_>"))
+      (should (eq (get-text-property (match-beginning 0) 'face)
+                  'font-lock-variable-name-face)))))
 
 (ert-deftest unison-ts-font-lock/let-pattern-destructuring ()
   "Pattern destructuring (Some x) = opt should parse correctly."

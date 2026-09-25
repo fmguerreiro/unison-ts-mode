@@ -187,6 +187,12 @@ tree-sitter generate --abi=13
 
 Check `~/.emacs.d/tree-sitter/` or `treesit-extra-load-path` contains the compiled grammar.
 
+**Highlighting is wrong after an upgrade:**
+
+The grammar is installed once and never re-checked, so a release that
+changes the pinned revision does not reach an existing install. Run `M-x
+unison-ts-install-grammar` to rebuild at the current pin.
+
 **LSP connection refused:**
 
 - Verify `ucm` is in PATH: `which ucm`
