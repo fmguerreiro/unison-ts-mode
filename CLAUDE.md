@@ -40,9 +40,15 @@ emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.e
 
 ## Tree-sitter Grammar
 
-Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `662bf52b966108cf299090a238cd6abfb65d5170` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
+Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `28be881547089225cd5253ead9db0e0d0e2e7a1f` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
 
-Do not bump the pin to a newer upstream commit without testing on Emacs 29 and 30. The pin is the parent of `b2ae57b` (2026-02-05); that commit and later were regenerated with a newer tree-sitter CLI and misparse `let`/`handle` expressions on the older tree-sitter runtimes bundled with Emacs 29 and some Emacs 30 builds.
+The pin is `28be881` ("fix(comment) - instance where in-line comment not detected by scanner"). Earlier revisions lex a trailing `--` as a symbolic operator and the comment text as identifiers, which derails the parse for the rest of the file and paints most of the buffer with `font-lock-warning-face`.
+
+The revision is duplicated in four places that must be kept in sync: `unison-ts-grammar-revision` (`unison-ts-install.el`), the `Build Unison grammar` step in `.github/workflows/ci.yml`, the manual build instructions in `README.md`, and the paragraph above in this file.
+
+Do not bump the pin without a green Emacs 29 CI run and a clean ERT suite. This pin descends from `b2ae57b`, where upstream regenerated the parser with a newer tree-sitter CLI; later revisions in that series misparse `let`/`handle`, and at `10365cc` the `handle-with` and `keyword-let` tests fail.
+
+When changing the grammar pin or font-lock queries, verify syntax claims against UCM rather than against the grammar itself, e.g. `ucm transcript.fork` on a scratch markdown file. Checking a construct against the grammar you are testing is circular, and the grammar is known to diverge from the compiler in both directions: `662bf52` accepts `{ pure y }`, which UCM rejects, and both revisions reject `Right ()`, which UCM accepts.
 
 ## UCM Keybindings
 

@@ -73,6 +73,9 @@
           (ability_declaration (constructor (constructor_name) @font-lock-function-name-face))
           ;; Record field names
           (record_field (field_name) @font-lock-property-name-face)
+          ;; Pattern variables bind names, so they are declarations rather
+          ;; than uses, at any nesting depth: (a, (b, c)) = (1, (2, 3))
+          (var_or_as (regular_identifier) @font-lock-variable-name-face)
           ;; declarations with no args are highlighted as variable declarations
           (term_definition name: (regular_identifier) @font-lock-variable-name-face :anchor (kw_equals))
           ;; by default, declarations are highlighted as function declarations

@@ -187,6 +187,12 @@ tree-sitter generate --abi=13
 
 Check `~/.emacs.d/tree-sitter/` or `treesit-extra-load-path` contains the compiled grammar.
 
+**Highlighting is wrong after an upgrade:**
+
+The grammar is installed once and never re-checked, so a release that
+changes the pinned revision does not reach an existing install. Run `M-x
+unison-ts-install-grammar` to rebuild at the current pin.
+
 **LSP connection refused:**
 
 - Verify `ucm` is in PATH: `which ucm`
@@ -207,7 +213,7 @@ If auto-install fails:
 ```sh
 git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
-git checkout 662bf52b966108cf299090a238cd6abfb65d5170
+git checkout 28be881547089225cd5253ead9db0e0d0e2e7a1f
 
 # Determine shared library extension
 if [ "$(uname)" = "Darwin" ]; then soext="dylib"
