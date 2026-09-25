@@ -54,8 +54,7 @@ This pin descends from b2ae57b, where upstream regenerated the parser
 with a newer tree-sitter CLI.  Later revisions in that series misparse
 `let'/`handle' expressions: at 10365cc the handle-with and keyword-let
 tests fail.  The Emacs 29 CI jobs are the gate on any bump, and the
-revision is repeated in .github/workflows/ci.yml, README.md and
-CLAUDE.md."
+revision is repeated in README.md and CLAUDE.md."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
