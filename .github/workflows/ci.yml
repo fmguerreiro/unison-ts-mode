@@ -121,10 +121,19 @@ jobs:
 
       - name: Build Unison grammar
         run: |
-          git clone --filter=blob:none --no-checkout \
-            https://github.com/kylegoetz/tree-sitter-unison.git /tmp/tree-sitter-unison
+          repository="$(emacs --batch -L . \
+            --eval '(progn (require (quote unison-ts-install)) (princ unison-ts-grammar-repository))')"
+          revision="$(emacs --batch -L . \
+            --eval '(progn (require (quote unison-ts-install)) (princ (or unison-ts-grammar-revision "")))')"
+          echo "Grammar repository: $repository"
+          echo "Grammar revision: ${revision:-(nil, default branch)}"
+          git clone --filter=blob:none --no-checkout "$repository" /tmp/tree-sitter-unison
           cd /tmp/tree-sitter-unison
-          git checkout 28be881547089225cd5253ead9db0e0d0e2e7a1f
+          if [ -z "$revision" ]; then
+            revision="$(git symbolic-ref --short HEAD)"
+            echo "Revision is nil; building default branch $revision"
+          fi
+          git checkout "$revision"
           mkdir -p ~/.emacs.d/tree-sitter
           cc -shared -fPIC -o ~/.emacs.d/tree-sitter/libtree-sitter-unison.so \
             -I src src/parser.c src/scanner.c
