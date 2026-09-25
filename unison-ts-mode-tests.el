@@ -27,12 +27,15 @@
 (require 'ert)
 (require 'treesit)
 
-;; Try common tree-sitter grammar locations
+;; Fallback grammar locations for running the suite with no path supplied.
+;; Appended, not prepended: a path the caller passed on the command line
+;; (as CI does with the grammar it just built) must outrank these guesses,
+;; or a stale grammar left in one of them silently shadows it.
 (dolist (path '("~/.emacs.d/tree-sitter/"
                 "~/doom-emacs/.local/cache/tree-sitter/"
                 "~/.local/share/tree-sitter/"))
   (when (file-directory-p (expand-file-name path))
-    (add-to-list 'treesit-extra-load-path (expand-file-name path))))
+    (add-to-list 'treesit-extra-load-path (expand-file-name path) t)))
 
 (defvar unison-ts-mode-tests--grammar-available
   (treesit-ready-p 'unison t)
