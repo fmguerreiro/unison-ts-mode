@@ -228,38 +228,50 @@ Signals an error if no project context is found."
   `((projectContext . ((projectName . ,project-name)
                        (branchName . ,branch-name)))))
 
-(defun unison-ts-mcp--update-definitions (code)
-  "Update definitions with CODE via MCP."
+(defun unison-ts-mcp--execute-operation (operation data &optional callback)
+ "Execute MCP OPERATION with DATA and optional CALLBACK."
   (unison-ts-mcp--with-project-context
    (lambda (project-name branch-name)
-     (unison-ts-mcp--call-tool
-      "update-definitions"
-      (append (unison-ts-mcp--make-project-context project-name branch-name)
-              `((code . ((text . ,code)))))))))
+     (let ((context (unison-ts-mcp--make-project-context project-name branch-name))
+           (tool-and-arguments
+            (pcase operation
+              ('update-definitions
+               `("update-definitions" . ((code . ((text . ,data))))))
+              ('run-tests
+               `("run-tests" . ,(when data `((subnamespace . ,data)))))
+              ('run
+               `("run" . ((mainFunctionName . ,(car data))
+                           (args . ,(or (cdr data) [])))))
+              ('typecheck-code
+               `("typecheck-code" . ((code . ((sourceCode . ,data))))))
+              ('view-definitions
+               `("view-definitions" . ((names . ,data))))
+              ('search-definitions-by-name
+               `("search-definitions-by-name" . ((query . ,data))))
+              ('search-by-type
+               `("search-by-type" . ((query . ,data))))
+              ('docs
+               `("docs" . ((name . ,data))))
+              (_
+               (error "Unknown MCP operation: %s" operation)))))
+       (unison-ts-mcp--call-tool
+        (car tool-and-arguments)
+        (append context (cdr tool-and-arguments))
+        callback)))))
+
+(defun unison-ts-mcp--update-definitions (code)
+  "Update definitions with CODE via MCP."
+  (unison-ts-mcp--execute-operation 'update-definitions code))
 
 (defun unison-ts-mcp--run-tests ()
   "Run tests in current project via MCP."
-  (unison-ts-mcp--with-project-context
-   (lambda (project-name branch-name)
-     (unison-ts-mcp--call-tool
-      "run-tests"
-      (unison-ts-mcp--make-project-context project-name branch-name)))))
+  (unison-ts-mcp--execute-operation 'run-tests nil))
 
 (defun unison-ts-mcp--run (definition)
   "Run DEFINITION in current project via MCP."
-  (unison-ts-mcp--with-project-context
-   (lambda (project-name branch-name)
-     (unison-ts-mcp--call-tool
-      "run"
-      (append (unison-ts-mcp--make-project-context project-name branch-name)
-              `((definition . ,definition)))))))
+  (unison-ts-mcp--execute-operation 'run (list definition)))
 
 ;;; UCM Headless Detection
-
-(defcustom unison-ts-api-host "localhost"
-  "Host for the UCM codebase server API."
-  :type 'string
-  :group 'unison-ts-repl)
 
 (defcustom unison-ts-lsp-port 5757
   "Port for the UCM LSP server.
@@ -277,17 +289,28 @@ Uses the UNISON_LSP_PORT env var when set, falling back to the
       (string-to-number env)
     unison-ts-lsp-port))
 
+(defun unison-ts-api--command-prints-p (program &rest args)
+  "Run PROGRAM with ARGS and return non-nil if it prints any stdout.
+Stderr is discarded so a tool diagnostic (permission warning, an
+unknown-flag error on an older ss) cannot masquerade as output."
+  (with-temp-buffer
+    (apply #'call-process program nil (list t nil) nil args)
+    (> (buffer-size) 0)))
+
 (defun unison-ts-api--port-open-p (port)
-  "Return non-nil if PORT is accepting connections on localhost."
-  (condition-case nil
-      (let ((proc (make-network-process
-                   :name "unison-port-check"
-                   :host unison-ts-api-host
-                   :service port
-                   :nowait nil)))
-        (delete-process proc)
-        t)
-    (error nil)))
+  "Return non-nil if PORT has a live listener on the local machine.
+Uses lsof (macOS/BSD) or ss (Linux) to check without opening a TCP
+connection, which poisons UCM's LSP listener.  Both branches
+require a matching line of stdout, not merely a zero exit: ss exits
+0 for any successful query even when nothing is listening."
+  (cond
+   ((executable-find "lsof")
+    (unison-ts-api--command-prints-p
+     "lsof" "-i" (format "TCP:%d" port) "-sTCP:LISTEN" "-P" "-n"))
+   ((executable-find "ss")
+    (unison-ts-api--command-prints-p
+     "ss" "-tlnH" (format "sport = :%d" port)))
+   (t nil)))
 
 (defun unison-ts-api--lsp-running-p ()
   "Return non-nil if UCM LSP server is running."
@@ -530,92 +553,50 @@ CALLBACK is called with the result string."
         (repl-buffer (current-buffer)))
     (if (eq command 'help)
         (funcall callback unison-ts-mcp-repl--help-text)
-      (unison-ts-mcp--with-project-context
-       (lambda (project-name branch-name)
-         (let* ((ctx (unison-ts-mcp--make-project-context project-name branch-name))
-                (wrapped-callback (lambda (result)
-                                    (with-current-buffer repl-buffer
-                                      (funcall callback (unison-ts-mcp-repl--format-result result))))))
-           (pcase command
-             ('watch
-              (unison-ts-mcp--call-tool
-               "typecheck-code"
-               (append ctx `((code . ((sourceCode . ,(if (string-prefix-p ">" args)
-                                                         args
-                                                       (concat "> " args)))))))
-               wrapped-callback))
-             ('add
-              (unison-ts-mcp--call-tool
-               "update-definitions"
-               (append ctx `((code . ((text . ,args)))))
-               wrapped-callback))
-             ('test
-              (unison-ts-mcp--call-tool
-               "run-tests"
-               (append ctx (when args `((subnamespace . ,args))))
-               wrapped-callback))
-             ('run
-              (unison-ts-mcp--call-tool
-               "run"
-               (append ctx `((mainFunctionName . ,(car args))
-                             (args . ,(or (cdr args) []))))
-               wrapped-callback))
-             ('view
-              (unison-ts-mcp--call-tool
-               "view-definitions"
-               (append ctx `((names . ,args)))
-               wrapped-callback))
-             ('find-name
-              (unison-ts-mcp--call-tool
-               "search-definitions-by-name"
-               (append ctx `((query . ,args)))
-               wrapped-callback))
-             ('find-type
-              (unison-ts-mcp--call-tool
-               "search-by-type"
-               (append ctx `((query . ,args)))
-               wrapped-callback))
-             ('docs
-              (unison-ts-mcp--call-tool
-               "docs"
-               (append ctx `((name . ,args)))
-               wrapped-callback))
-             (_
-              (funcall callback (format "Unknown command: %s\nType 'help' for available commands." command))))))))))
+      (let ((wrapped-callback
+             (lambda (result)
+               (with-current-buffer repl-buffer
+                 (funcall callback (unison-ts-mcp-repl--format-result result))))))
+        (pcase command
+          ('watch
+           (unison-ts-mcp--execute-operation
+            'typecheck-code
+            (if (string-prefix-p ">" args) args (concat "> " args))
+            wrapped-callback))
+          ('add
+           (unison-ts-mcp--execute-operation 'update-definitions args wrapped-callback))
+          ('test
+           (unison-ts-mcp--execute-operation 'run-tests args wrapped-callback))
+          ('run
+           (unison-ts-mcp--execute-operation 'run args wrapped-callback))
+          ('view
+           (unison-ts-mcp--execute-operation 'view-definitions args wrapped-callback))
+          ('find-name
+           (unison-ts-mcp--execute-operation
+            'search-definitions-by-name args wrapped-callback))
+          ('find-type
+           (unison-ts-mcp--execute-operation 'search-by-type args wrapped-callback))
+          ('docs
+           (unison-ts-mcp--execute-operation 'docs args wrapped-callback))
+          (_
+           (funcall callback
+                    (format "Unknown command: %s\nType 'help' for available commands."
+                            command))))))))
 
 (defun unison-ts-mcp-repl--format-result (result)
   "Format MCP RESULT for display in REPL."
-  (if result
-      (let* ((content-array (alist-get 'content result))
-             (content (if (vectorp content-array)
-                          (aref content-array 0)
-                        (car content-array)))
-             (text (alist-get 'text content)))
-        (if text
-            (let ((parsed (condition-case nil
-                              (json-read-from-string text)
-                            (error text))))
-              (if (and (listp parsed) (not (stringp parsed)))
-                  ;; Structured response - deduplicate messages and filter errors from outputs
-                  (let* ((errors (unison-ts--dedupe-messages (alist-get 'errorMessages parsed)))
-                         (error-keys (mapcar #'string-trim errors))
-                         (outputs (seq-filter
-                                   (lambda (m)
-                                     (and (not (string-match-p "^Loading changes" m))
-                                          (not (string-match-p "^No changes found" m))
-                                          (not (member (string-trim m) error-keys))))
-                                   (unison-ts--dedupe-messages (alist-get 'outputMessages parsed)))))
-                    (concat
-                     (when (and errors (> (length errors) 0))
-                       (concat "Errors:\n"
-                               (mapconcat #'identity errors "\n")
-                               "\n"))
-                     (when (and outputs (> (length outputs) 0))
-                       (mapconcat #'identity outputs "\n"))))
-                ;; Plain text
-                (format "%s" parsed)))
-          "(no content)"))
-    "(no result)"))
+  (let* ((normalized (unison-ts-mcp--normalize-result result))
+         (status (plist-get normalized :status))
+         (errors (plist-get normalized :errors))
+         (outputs (plist-get normalized :outputs)))
+    (pcase status
+      ('missing-result "(no result)")
+      ('missing-content "(no content)")
+      (_ (concat
+          (when errors
+            (concat "Errors:\n" (string-join errors "\n") "\n"))
+          (when outputs
+            (string-join outputs "\n")))))))
 
 (defun unison-ts-mcp-repl-send ()
   "Send current input to UCM via MCP."
@@ -878,66 +859,73 @@ otherwise use `display-buffer'."
   "Send COMMAND to the UCM REPL and switch to it."
   (unison-ts--send-to-repl--impl command t))
 
-(defun unison-ts--parse-mcp-output (text)
-  "Parse MCP output TEXT which may be JSON-encoded UCM response."
-  (condition-case nil
-      (let ((parsed (json-read-from-string text)))
+
+(defun unison-ts-mcp--normalize-messages (messages)
+  "Prepare MCP messages for shared presentation."
+  (let (normalized)
+    (dolist (message (cond
+                      ((vectorp messages) (append messages nil))
+                      ((listp messages) messages)
+                      ((stringp messages) (list messages))))
+      (when (stringp message)
+        (let ((message (string-trim message)))
+          (unless (or (string-empty-p message) (member message normalized))
+            (push message normalized)))))
+    (nreverse normalized)))
+
+(defun unison-ts-mcp--normalize-result (result)
+  "Give every MCP presentation path the same filtered response."
+  (let* ((content-array (and (listp result) (alist-get 'content result)))
+         (content (cond
+                   ((vectorp content-array)
+                    (and (> (length content-array) 0) (aref content-array 0)))
+                   ((listp content-array) (car content-array))))
+         (text (and content (alist-get 'text content))))
+    (cond
+     ((null result) '(:status missing-result))
+     ((null text) '(:status missing-content))
+     (t
+      (let ((parsed (condition-case nil
+                        (json-read-from-string text)
+                      (error text))))
         (if (and (listp parsed)
+                 (not (stringp parsed))
                  (or (alist-get 'errorMessages parsed)
                      (alist-get 'outputMessages parsed)))
-            parsed
-          text))
-    (error text)))
-
-(defun unison-ts--dedupe-messages (messages)
-  "Remove duplicate MESSAGES, normalizing whitespace for comparison."
-  (let ((seen (make-hash-table :test 'equal))
-        (result nil))
-    (dolist (msg (append messages nil))
-      (let ((key (string-trim msg)))
-        (unless (gethash key seen)
-          (puthash key t seen)
-          (push msg result))))
-    (nreverse result)))
+            (let* ((errors (unison-ts-mcp--normalize-messages
+                            (alist-get 'errorMessages parsed)))
+                   (outputs (seq-filter
+                             (lambda (message)
+                               (and (not (member message errors))
+                                    (not (string-match-p
+                                          "\\`\\(?:Loading changes\\|No changes found\\|Run `update` to apply\\)"
+                                          message))))
+                             (unison-ts-mcp--normalize-messages
+                              (alist-get 'outputMessages parsed)))))
+              (list :status 'structured :errors errors :outputs outputs))
+          (list :status 'text
+                :outputs (unison-ts-mcp--normalize-messages
+                          (list (format "%s" parsed))))))))))
 
 (defun unison-ts--display-mcp-result (result title at)
   "Display MCP RESULT appropriately based on content.
 Short success messages go to minibuffer, errors/long output to a buffer.
 AT is a buffer position; when the result is a success, an inline overlay
 is shown at that position in addition to the minibuffer message."
-  (let ((overlay-position at))
-    (if (and result (listp result))
-        (let* ((content-array (alist-get 'content result))
-               (content (if (vectorp content-array)
-                            (aref content-array 0)
-                          (car content-array)))
-               (text (alist-get 'text content))
-               (parsed (when text (unison-ts--parse-mcp-output text))))
-          (if (and (listp parsed) (not (stringp parsed)))
-              (let* ((errors (unison-ts--dedupe-messages (alist-get 'errorMessages parsed)))
-                     (error-keys (mapcar #'string-trim errors))
-                     (outputs (seq-filter
-                               (lambda (msg)
-                                 (and (not (string-match-p "^Loading changes" msg))
-                                      (not (string-match-p "^No changes found" msg))
-                                      ;; Filter misleading "Run `update`" - MCP already commits
-                                      (not (string-match-p "Run `update` to apply" msg))
-                                      (not (member (string-trim msg) error-keys))))
-                               (unison-ts--dedupe-messages (alist-get 'outputMessages parsed)))))
-                (if (= (length errors) 0)
-                    ;; Success → minibuffer + optional overlay
-                    (let ((output-str (string-join outputs " ")))
-                      (if (string-match-p "^\\+" output-str)
-                          ;; Definitions were added - show what was added
-                          (message "UCM: Added definitions. %s" output-str)
-                        (message "UCM: %s" output-str))
-                      (unison-ts--overlay-show overlay-position output-str))
-                  ;; Errors → buffer
-                  (unison-ts--display-in-buffer title errors outputs)))
-            ;; Non-parsed output → buffer
-            (unison-ts--display-in-buffer title nil (list (format "%s" parsed)))))
-      ;; Fallback → buffer
-      (unison-ts--display-in-buffer title nil (list (format "%S" result))))))
+  (let* ((normalized (unison-ts-mcp--normalize-result result))
+         (status (plist-get normalized :status))
+         (errors (plist-get normalized :errors))
+         (outputs (plist-get normalized :outputs)))
+    (if (eq status 'structured)
+        (if errors
+            (unison-ts--display-in-buffer title errors outputs)
+          (let ((output-str (string-join outputs " ")))
+            (if (string-match-p "^\\+" output-str)
+                (message "UCM: Added definitions. %s" output-str)
+              (message "UCM: %s" output-str))
+            (unison-ts--overlay-show at output-str)))
+      (unison-ts--display-in-buffer
+       title nil (or outputs (list (format "%S" result)))))))
 
 (defun unison-ts--display-in-buffer (title errors outputs)
   "Display ERRORS and OUTPUTS in a *UCM: TITLE* buffer.
@@ -967,18 +955,11 @@ Displays result with TITLE when complete."
   (unless buffer-file-name
     (user-error "Buffer is not visiting a file"))
   (let ((code (buffer-substring-no-properties (point-min) (point-max)))
-        (ctx (unison-ts-mcp--get-project-context))
         (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (let ((project-name (alist-get 'projectName ctx))
-          (branch-name (alist-get 'branchName ctx)))
-      (unison-ts-mcp--call-tool
-       "update-definitions"
-       (append (unison-ts-mcp--make-project-context project-name branch-name)
-               `((code . ((text . ,code)))))
-       (lambda (result)
-         (unison-ts--display-mcp-result result title position))))))
+    (unison-ts-mcp--execute-operation
+     'update-definitions code
+     (lambda (result)
+       (unison-ts--display-mcp-result result title position)))))
 
 ;;;###autoload
 (defun unison-ts-add ()
@@ -996,15 +977,9 @@ Displays result with TITLE when complete."
 (defun unison-ts-test ()
   "Run tests in the current project via MCP."
   (interactive)
-  (let ((ctx (unison-ts-mcp--get-project-context))
-        (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "run-tests"
-     (unison-ts-mcp--make-project-context
-      (alist-get 'projectName ctx)
-      (alist-get 'branchName ctx))
+  (let ((position (point)))
+    (unison-ts-mcp--execute-operation
+     'run-tests nil
      (lambda (result)
        (unison-ts--display-mcp-result result "test" position)))))
 
@@ -1014,16 +989,9 @@ Displays result with TITLE when complete."
 EXPR is evaluated using the typecheck-code tool with > prefix.
 Works for both pure functions and IO actions."
   (interactive "sExpression: ")
-  (let ((ctx (unison-ts-mcp--get-project-context))
-        (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "typecheck-code"
-     (append (unison-ts-mcp--make-project-context
-              (alist-get 'projectName ctx)
-              (alist-get 'branchName ctx))
-             `((code . ((sourceCode . ,(concat "> " expr))))))
+  (let ((position (point)))
+    (unison-ts-mcp--execute-operation
+     'typecheck-code (concat "> " expr)
      (lambda (result)
        (unison-ts--display-mcp-result result "eval" position)))))
 
@@ -1033,17 +1001,9 @@ Works for both pure functions and IO actions."
 For pure expressions, use `unison-ts-eval' instead."
   (interactive)
   (let ((term (read-string "IO action to run: "))
-        (ctx (unison-ts-mcp--get-project-context))
         (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "run"
-     (append (unison-ts-mcp--make-project-context
-              (alist-get 'projectName ctx)
-              (alist-get 'branchName ctx))
-             `((mainFunctionName . ,term)
-               (args . [])))
+    (unison-ts-mcp--execute-operation
+     'run (list term)
      (lambda (result)
        (unison-ts--display-mcp-result result "run" position)))))
 
@@ -1054,16 +1014,9 @@ For pure expressions, use `unison-ts-eval' instead."
   (unless buffer-file-name
     (user-error "Buffer is not visiting a file"))
   (let ((code (buffer-substring-no-properties (point-min) (point-max)))
-        (ctx (unison-ts-mcp--get-project-context))
         (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "typecheck-code"
-     (append (unison-ts-mcp--make-project-context
-              (alist-get 'projectName ctx)
-              (alist-get 'branchName ctx))
-             `((code . ((sourceCode . ,code)))))
+    (unison-ts-mcp--execute-operation
+     'typecheck-code code
      (lambda (result)
        (unison-ts--display-mcp-result result "watch" position)))))
 

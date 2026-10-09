@@ -22,6 +22,8 @@
 
 ;;; Code:
 
+(require 'treesit)
+
 (defcustom unison-ts-grammar-install 'prompt
   "Control automatic grammar installation.
 - prompt: Ask before installing (default)
@@ -33,62 +35,146 @@
   :group 'unison-ts)
 
 (defcustom unison-ts-grammar-repository "https://github.com/kylegoetz/tree-sitter-unison"
-  "Repository URL for the Unison tree-sitter grammar."
+  "Repository URL for the Unison tree-sitter grammar.
+When `unison-ts-grammar-revision' is a raw commit SHA the host must allow
+fetching unadvertised objects (`uploadpack.allowReachableSHA1InWant'),
+which GitHub does but a self-hosted mirror may not; a branch or tag name
+fetches from any host."
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision "662bf52b966108cf299090a238cd6abfb65d5170"
+(defcustom unison-ts-grammar-revision "28be881547089225cd5253ead9db0e0d0e2e7a1f"
   "Git revision (branch, tag, or commit) for the grammar.
 If nil, uses the default branch.
-Pinned to the last upstream commit whose generated parser runs on the
-older tree-sitter runtimes bundled with Emacs 29 and some Emacs 30
-builds.  Commit b2ae57b (the child of this pin) and later were
-regenerated with a newer tree-sitter CLI and misparse `let'/`handle'
-expressions on those runtimes; bump only after verifying a newer
-revision against Emacs 29 and 30."
+Pinned to upstream commit 28be881, which fixes trailing (end-of-line)
+comments.  Revisions before it lex a trailing `--' as a symbolic
+operator and the comment text as identifiers, derailing the parse for
+the rest of the file.
+This pin descends from b2ae57b, where upstream regenerated the parser
+with a newer tree-sitter CLI.  Later revisions in that series misparse
+`let'/`handle' expressions: at 10365cc the handle-with and keyword-let
+tests fail.  The Emacs 29 CI jobs are the gate on any bump, and the
+revision is repeated in README.md and CLAUDE.md."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
 
-(defvar unison-ts--install-prompted nil
-  "Whether we've already prompted for installation this session.")
+(defvar unison-ts--install-declined nil
+  "Non-nil once the user declined the install prompt this session.
+Set only on an explicit \"no\".  Consulted in every mode, so it also
+suppresses a later auto-install this session; a failed install does not
+set it, leaving the user free to be asked again or to retry with
+\\[unison-ts-install-grammar].")
+
+(defvar unison-ts--install-failed nil
+  "Non-nil once an automatic install attempt failed this session.
+Only consulted when `unison-ts-grammar-install' is `auto'.  It stops an
+unattended clone+compile from repeating on every .u buffer opened
+against a persistently broken toolchain; retry with
+\\[unison-ts-install-grammar] after fixing the toolchain.  Never reset:
+a successful install short-circuits `unison-ts-ensure-grammar' before
+this flag is checked again.")
+
+(defconst unison-ts--grammar-revision-branch "unison-ts-pinned-revision"
+  "Local branch name pointed at `unison-ts-grammar-revision' during install.")
+
+(defun unison-ts--run-git (directory &rest arguments)
+  "Run git with ARGUMENTS in DIRECTORY, signaling on a non-zero exit."
+  (let ((default-directory (file-name-as-directory directory)))
+    (with-temp-buffer
+      (let ((status (apply #'call-process "git" nil t nil arguments)))
+        (unless (eq status 0)
+          (error "Git %s failed: %s"
+                 (string-join arguments " ")
+                 (string-trim (buffer-string))))))))
+
+(defun unison-ts--install-grammar ()
+  "Fetch the pinned grammar revision and install it into tree-sitter.
+`git clone -b' resolves only branch and tag names, never a raw commit
+SHA, so this fetches the revision into a temporary directory and points
+a local branch at it before registering that branch as the source.  The
+branch exists for Emacs 29, which clones the source with `-b'; Emacs 30
+runs `git checkout' in place and would take the SHA directly.
+
+With no revision there is nothing to pin, so treesit clones the
+repository's default branch directly."
+  (if (null unison-ts-grammar-revision)
+      (let ((treesit-language-source-alist
+             (list (list 'unison unison-ts-grammar-repository))))
+        (treesit-install-language-grammar 'unison))
+    (let ((fetch-directory (make-temp-file "unison-ts-grammar-" t)))
+      (unwind-protect
+          (progn
+            ;; Shallow-fetch just the pinned commit; the full history is
+            ;; ~20x the download for one commit.
+            (unison-ts--run-git fetch-directory "init" "--quiet")
+            (unison-ts--run-git fetch-directory "fetch" "--quiet" "--depth" "1"
+                                unison-ts-grammar-repository
+                                unison-ts-grammar-revision)
+            (unison-ts--run-git fetch-directory "branch"
+                                unison-ts--grammar-revision-branch "FETCH_HEAD")
+            (let ((treesit-language-source-alist
+                   (list (list 'unison fetch-directory
+                               unison-ts--grammar-revision-branch))))
+              (treesit-install-language-grammar 'unison)))
+        (delete-directory fetch-directory t)))))
 
 (defun unison-ts-install-grammar ()
-  "Install tree-sitter grammar for Unison."
+  "Install tree-sitter grammar for Unison.
+Return t if the grammar is available afterward, nil otherwise.  Emacs
+demotes tree-sitter install failures to warnings, so success is
+confirmed with `treesit-language-available-p' rather than by trusting
+that the install call signaled or returned non-nil."
   (interactive)
-  (unless (assoc 'unison treesit-language-source-alist)
-    (add-to-list 'treesit-language-source-alist
-                 (if unison-ts-grammar-revision
-                     (list 'unison unison-ts-grammar-repository unison-ts-grammar-revision)
-                   (list 'unison unison-ts-grammar-repository))))
-  (condition-case err
-      (progn
-        (message "Installing Unison grammar...")
-        (treesit-install-language-grammar 'unison)
-        (message "Unison grammar installed successfully")
-        t)
-    (error
-     (message "Failed to install Unison grammar: %s" (error-message-string err))
-     nil)))
+  (message "Installing Unison grammar...")
+  (let ((install-error
+         (condition-case err
+             (progn (unison-ts--install-grammar) nil)
+           (error (error-message-string err)))))
+    (if (treesit-language-available-p 'unison)
+        (progn
+          (message "Unison grammar installed successfully")
+          t)
+      (display-warning
+       'unison-ts
+       (format (concat "Failed to install Unison grammar from %s%s%s.  "
+                       "Retry with M-x unison-ts-install-grammar after "
+                       "fixing the toolchain.")
+               unison-ts-grammar-repository
+               (if unison-ts-grammar-revision
+                   (format " (revision %s)" unison-ts-grammar-revision)
+                 "")
+               (if install-error
+                   (format ": %s" install-error)
+                 "; see the tree-sitter error in the *Warnings* buffer"))
+       :error)
+      nil)))
 
 (defun unison-ts-ensure-grammar ()
   "Ensure tree-sitter grammar for Unison is installed.
-Returns t if grammar is available, nil otherwise."
+Return t if the grammar is available, nil if it is unavailable and
+installation was declined, disabled, or failed."
   (cond
    ((treesit-language-available-p 'unison)
     t)
 
-   (unison-ts--install-prompted
+   ;; Must precede the mode arms so a decline suppresses a later
+   ;; auto-install too; see `unison-ts--install-declined'.
+   (unison-ts--install-declined
     nil)
 
    ((eq unison-ts-grammar-install 'auto)
-    (setq unison-ts--install-prompted t)
-    (unison-ts-install-grammar))
+    ;; See `unison-ts--install-failed' for why a failure latches here.
+    (unless unison-ts--install-failed
+      (or (unison-ts-install-grammar)
+          (progn (setq unison-ts--install-failed t) nil))))
 
    ((eq unison-ts-grammar-install 'prompt)
-    (setq unison-ts--install-prompted t)
-    (when (y-or-n-p "Install Unison grammar for syntax highlighting? ")
-      (unison-ts-install-grammar)))
+    ;; Only an explicit decline latches; see `unison-ts--install-declined'.
+    (if (y-or-n-p "Install Unison grammar for syntax highlighting? ")
+        (unison-ts-install-grammar)
+      (setq unison-ts--install-declined t)
+      nil))
 
    (t
     (message "Unison grammar not found. Set unison-ts-grammar-install to enable auto-install.")

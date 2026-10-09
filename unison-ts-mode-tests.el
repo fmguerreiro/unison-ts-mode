@@ -27,12 +27,15 @@
 (require 'ert)
 (require 'treesit)
 
-;; Try common tree-sitter grammar locations
+;; Fallback grammar locations for running the suite with no path supplied.
+;; Appended, not prepended: a path the caller passed on the command line
+;; (as CI does with the grammar it just built) must outrank these guesses,
+;; or a stale grammar left in one of them silently shadows it.
 (dolist (path '("~/.emacs.d/tree-sitter/"
                 "~/doom-emacs/.local/cache/tree-sitter/"
                 "~/.local/share/tree-sitter/"))
   (when (file-directory-p (expand-file-name path))
-    (add-to-list 'treesit-extra-load-path (expand-file-name path))))
+    (add-to-list 'treesit-extra-load-path (expand-file-name path) t)))
 
 (defvar unison-ts-mode-tests--grammar-available
   (treesit-ready-p 'unison t)
@@ -167,6 +170,39 @@
   (unison-ts-mode-tests--with-buffer "-- this is a comment"
     (goto-char (point-min))
     (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))))
+
+(ert-deftest unison-ts-font-lock/comment-trailing-after-term ()
+  "Trailing (end-of-line) comments should be highlighted.
+Grammar revisions before 28be881 lex a trailing `--' as a symbolic
+operator and the comment text as identifiers, so the comment renders as
+code and the rest of the file parses as an error."
+  (unison-ts-mode-tests--with-buffer "x = 1 -- trailing comment"
+    (goto-char (point-min))
+    (search-forward "--")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))))
+
+(ert-deftest unison-ts-font-lock/comment-trailing-in-ability ()
+  "Trailing comments inside an ability declaration should be highlighted.
+This is the shape that regressed first: the mis-lexed `--' and the words
+after it rendered as code."
+  (unison-ts-mode-tests--with-buffer
+      "ability Git where\n  status : [Text]    -- uncommitted paths\n  currentBranch : Text"
+    (goto-char (point-min))
+    (search-forward "--")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))
+    ;; The comment text is comment, not code: the mis-lex turned it into
+    ;; identifiers.
+    (goto-char (point-min))
+    (search-forward "uncommitted")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))
+    ;; The operation after the comment is still an operation.
+    (goto-char (point-min))
+    (search-forward "currentBranch")
+    (goto-char (match-beginning 0))
+    (should (eq (get-text-property (point) 'face) 'font-lock-function-name-face))))
 
 (ert-deftest unison-ts-font-lock/comment-block ()
   "Block comments ({- -}) should be highlighted."
@@ -389,8 +425,11 @@
     (should (eq (unison-ts-mode-tests--face-at-string "with") 'font-lock-keyword-face))))
 
 (ert-deftest unison-ts-font-lock/handle-with ()
-  "Handle/with keywords should be highlighted."
-  (unison-ts-mode-tests--with-buffer "x = handle foo with cases\n  { pure y } -> y"
+  "Handle/with keywords should be highlighted.
+`pure' is not a Unison keyword, so the pure case of a handler is spelled
+`{ y } -> y'.  UCM rejects `{ pure y }' with \"I couldn't resolve any of
+these names: pure\", so this fixture must not use that form."
+  (unison-ts-mode-tests--with-buffer "x = handle foo with cases\n  { y } -> y"
     (should (eq (unison-ts-mode-tests--face-at-string "handle") 'font-lock-keyword-face))
     (should (eq (unison-ts-mode-tests--face-at-string "with") 'font-lock-keyword-face))))
 
@@ -653,10 +692,16 @@
     (goto-char (point-min))
     (search-forward "(a,")
     (backward-char 2)
-    (let ((face (get-text-property (point) 'face)))
-      (should (or (eq face 'font-lock-variable-name-face)
-                  (eq face 'font-lock-function-name-face)
-                  (null face))))))
+    (should (eq (get-text-property (point) 'face) 'font-lock-variable-name-face))))
+
+(ert-deftest unison-ts-font-lock/let-tuple-destructuring-nested ()
+  "Nested tuple patterns should highlight binders at every depth."
+  (unison-ts-mode-tests--with-buffer "foo =\n  let\n    (a, (b, c)) = (1, (2, 3))\n    a"
+    (dolist (name '("a" "b" "c"))
+      (goto-char (point-min))
+      (re-search-forward (concat "\\_<" name "\\_>"))
+      (should (eq (get-text-property (match-beginning 0) 'face)
+                  'font-lock-variable-name-face)))))
 
 (ert-deftest unison-ts-font-lock/let-pattern-destructuring ()
   "Pattern destructuring (Some x) = opt should parse correctly."
@@ -1363,6 +1408,25 @@ at `~/.unison/' so the walk always terminates at home."
   (let ((unison-ts-lsp-port 59998))
     (should-not (unison-ts-api--lsp-running-p))))
 
+(ert-deftest unison-ts-api/port-open-p-detects-listener ()
+  "`unison-ts-api--port-open-p' must return non-nil only for a port
+with a live listener. Regression guard for gh#31 (see that
+function's docstring for the ss false-positive it guards against)."
+  (require 'unison-ts-repl)
+  (unless (or (executable-find "lsof") (executable-find "ss"))
+    (ert-skip "neither lsof nor ss available"))
+  (let* ((port 59771)
+         (server (make-network-process
+                  :name "unison-test-listener"
+                  :server t
+                  :host "127.0.0.1"
+                  :service port
+                  :family 'ipv4)))
+    (unwind-protect
+        (should (unison-ts-api--port-open-p port))
+      (delete-process server))
+    (should-not (unison-ts-api--port-open-p port))))
+
 (ert-deftest unison-ts-repl/start-uses-managed-lifecycle ()
   "REPL starts UCM through managed lifecycle seam."
   (require 'unison-ts-repl)
@@ -1409,6 +1473,44 @@ at `~/.unison/' so the walk always terminates at home."
   "run tool call should be properly formatted."
   (require 'unison-ts-repl)
   (should (fboundp 'unison-ts-mcp--run)))
+
+(ert-deftest unison-ts-mcp/editor-and-repl-operations-match ()
+  "Matching editor and REPL actions call MCP with identical payloads."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let (calls)
+    (cl-letf (((symbol-function 'unison-ts-mcp--get-project-context)
+               (lambda ()
+                 '((projectName . "test-project")
+                   (branchName . "main"))))
+              ((symbol-function 'unison-ts-mcp--call-tool)
+               (lambda (tool arguments &optional _callback)
+                 (push (list tool arguments) calls)))
+              ((symbol-function 'read-string)
+               (lambda (&rest _) "Main.main")))
+      (with-temp-buffer
+        (insert "answer = 42")
+        (setq buffer-file-name "/tmp/test-project/main.u")
+        (unison-ts-add)
+        (unison-ts-mcp-repl--execute-async 'add "answer = 42" #'ignore)
+        (unison-ts-test)
+        (unison-ts-mcp-repl--execute-async 'test nil #'ignore)
+        (unison-ts-eval "answer")
+        (unison-ts-mcp-repl--execute-async 'watch "answer" #'ignore)
+        (unison-ts-run)
+        (unison-ts-mcp-repl--execute-async 'run '("Main.main") #'ignore)))
+    (setq calls (nreverse calls))
+    (should (equal (nth 0 calls) (nth 1 calls)))
+    (should (equal (nth 2 calls) (nth 3 calls)))
+    (should (equal (nth 4 calls) (nth 5 calls)))
+    (should (equal (nth 6 calls) (nth 7 calls)))
+    (should
+     (equal (nth 6 calls)
+            '("run"
+              ((projectContext . ((projectName . "test-project")
+                                  (branchName . "main")))
+              (mainFunctionName . "Main.main")
+              (args . [])))))))
 
 (ert-deftest unison-ts-mcp/async-uses-process-object-not-name ()
   "`unison-ts-mcp--call' must send to the process object returned
@@ -1623,6 +1725,39 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
       (unison-ts--overlay-show 5 "42")
       (should-not (overlays-in 5 5)))))
 
+(ert-deftest unison-ts-mcp/normalizes-structured-result-messages ()
+  (require 'unison-ts-repl)
+  (should
+   (equal
+    (unison-ts-mcp--normalize-result
+     `((content . [((type . "text")
+                    (text . "{\"errorMessages\":[\" type error \",\"type error\"],\"outputMessages\":[\" Loading changes...\",\"No changes found\",\"Run `update` to apply changes\",\" type error \",\" value \",\"value\",\"   \"]}"))])))
+    '(:status structured :errors ("type error") :outputs ("value")))))
+
+(ert-deftest unison-ts-mcp/repl-formats-normalized-result ()
+  (require 'unison-ts-repl)
+  (should
+   (equal
+    (unison-ts-mcp-repl--format-result
+     `((content . [((type . "text")
+                    (text . "{\"errorMessages\":[\" type error \"],\"outputMessages\":[\"Loading changes...\",\" value \",\"type error\"]}"))])))
+    "Errors:\ntype error\nvalue")))
+
+(ert-deftest unison-ts-mcp/one-shot-presentation-uses-normalized-output ()
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "hello")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s")
+          (result `((content . [((type . "text")
+                                 (text . "{\"errorMessages\":[],\"outputMessages\":[\"Loading changes...\",\" value \",\"value\"]}"))]))))
+      (unison-ts--display-mcp-result result "eval" 5)
+      (should
+       (equal
+        (substring-no-properties
+         (overlay-get (car (overlays-in 5 5)) 'after-string))
+        " => value")))))
+
 (ert-deftest unison-ts-overlay/display-mcp-result-success-calls-overlay ()
   "Success path of unison-ts--display-mcp-result must invoke overlay show."
   (require 'unison-ts-repl)
@@ -1736,6 +1871,231 @@ the parser routes to the 'add command."
          (parsed (unison-ts-mcp-repl--parse-command input)))
     (should (eq (car parsed) 'add))
     (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
+
+;;; Grammar installation - fetch the pinned revision, verify availability
+
+(defun unison-ts-tests--make-git-fixture ()
+  "Create a throwaway git repo with two commits and return a plist.
+:dir is the repo path, :pinned is the SHA of the first commit and :tip
+the SHA of the second, so the pinned commit is not the branch tip."
+  (let* ((directory (make-temp-file "unison-ts-fixture-" t))
+         (run-git (lambda (&rest arguments)
+                    (apply #'process-lines "git" "-C" directory arguments))))
+    (funcall run-git "init" "--quiet")
+    (funcall run-git "config" "user.email" "test@example.com")
+    (funcall run-git "config" "user.name" "Test")
+    (funcall run-git "commit" "--quiet" "--allow-empty" "-m" "pinned")
+    (let ((pinned (car (funcall run-git "rev-parse" "HEAD"))))
+      (funcall run-git "commit" "--quiet" "--allow-empty" "-m" "tip")
+      (list :dir directory
+            :pinned pinned
+            :tip (car (funcall run-git "rev-parse" "HEAD"))))))
+
+(ert-deftest unison-ts-install/points-source-branch-at-pinned-revision ()
+  "The source branch resolves to the pinned SHA, not the tip.
+See `unison-ts--install-grammar' for why a raw SHA cannot name a
+treesit grammar source directly."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let* ((fixture (unison-ts-tests--make-git-fixture))
+         (unison-ts-grammar-repository (plist-get fixture :dir))
+         (unison-ts-grammar-revision (plist-get fixture :pinned))
+         (captured nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'treesit-language-available-p)
+                     (lambda (&rest _) t))
+                    ((symbol-function 'treesit-install-language-grammar)
+                     (lambda (&rest _)
+                       (let* ((entry (assq 'unison treesit-language-source-alist))
+                              (directory (nth 1 entry))
+                              (branch (nth 2 entry)))
+                         (setq captured
+                               (list :branch branch
+                                     :resolved (car (process-lines
+                                                     "git" "-C" directory
+                                                     "rev-parse" branch))))))))
+            (should (eq (unison-ts-install-grammar) t)))
+          (should (equal (plist-get captured :branch)
+                         unison-ts--grammar-revision-branch))
+          (should (equal (plist-get captured :resolved) (plist-get fixture :pinned)))
+          (should-not (equal (plist-get captured :resolved)
+                             (plist-get fixture :tip))))
+      (delete-directory (plist-get fixture :dir) t))))
+
+(ert-deftest unison-ts-install/reports-fetch-error-and-returns-nil ()
+  "A failed fetch is caught, warned about once with the git error, and returns nil.
+Emacs demotes treesit's own failures to warnings, but a fetch failure
+from `unison-ts--run-git' signals, so this exercises the caught-error
+warning path."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  ;; Load warnings.el before the stub: display-warning is an autoload, and
+  ;; resolving it mid-call replaces the stub with the real function.
+  (require 'warnings)
+  (let ((unison-ts-grammar-repository "/unison-ts/does-not-exist")
+        (unison-ts-grammar-revision "662bf52")
+        (warned nil)
+        (level nil))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &optional severity &rest _)
+                 (setq warned message level severity))))
+      (should (eq (unison-ts-install-grammar) nil)))
+    (should (eq level :error))
+    ;; git's stderr is version- and locale-dependent, so match the stable
+    ;; leading text rather than the full message.
+    (should (string-prefix-p
+             (concat "Failed to install Unison grammar from "
+                     "/unison-ts/does-not-exist (revision 662bf52): Git fetch")
+             warned))))
+
+(ert-deftest unison-ts-install/does-not-reprompt-after-decline ()
+  "An explicit decline latches the prompt off for the rest of the session."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'prompt)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (prompts 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (error "install must not run after a decline"))))
+      (should-not (unison-ts-ensure-grammar))
+      (should-not (unison-ts-ensure-grammar))
+      (should (= prompts 1)))))
+
+(ert-deftest unison-ts-install/reprompts-after-a-failed-install ()
+  "A failed install does not latch; see `unison-ts--install-declined'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (require 'warnings)
+  (let ((unison-ts-grammar-install 'prompt)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (prompts 0)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) t))
+              ((symbol-function 'display-warning)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (should-not (unison-ts-ensure-grammar))
+      (should (= prompts 2))
+      (should (= installs 2)))))
+
+(ert-deftest unison-ts-install/does-not-reattempt-auto-install-after-failure ()
+  "Auto mode latches off after a failed install; see `unison-ts--install-failed'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (require 'warnings)
+  (let ((unison-ts-grammar-install 'auto)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (should-not (unison-ts-ensure-grammar))
+      (should (= installs 1)))))
+
+(ert-deftest unison-ts-install/auto-install-success-returns-t ()
+  "A successful auto install reports availability without latching anything."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'auto)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (installed nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (setq installed t)))
+              ((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) installed)))
+      (should (eq (unison-ts-ensure-grammar) t))
+      (should-not unison-ts--install-failed))))
+
+(ert-deftest unison-ts-install/failure-warning-names-the-manual-retry ()
+  "A failed install points the user at the M-x retry command.
+The only place an `auto'-mode user, who otherwise degrades silently,
+learns how to retry after fixing the toolchain."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  ;; Load warnings.el before the stub: display-warning is an autoload, and
+  ;; resolving it mid-call replaces the stub with the real function.
+  (require 'warnings)
+  (let ((unison-ts-grammar-revision nil)
+        (warned nil))
+    (cl-letf (((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &rest _) (setq warned message))))
+      (should-not (unison-ts-install-grammar)))
+    (should (string-match-p "M-x unison-ts-install-grammar" warned))))
+
+(ert-deftest unison-ts-install/decline-suppresses-later-auto-install ()
+  "A decline latches across modes; see `unison-ts--install-declined'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (let ((unison-ts-grammar-install 'prompt)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (setq unison-ts-grammar-install 'auto)
+      (should-not (unison-ts-ensure-grammar))
+      (should (= installs 0)))))
+
+(ert-deftest unison-ts-install/auto-failure-does-not-suppress-later-prompt ()
+  "The auto-failure latch is auto-only, unlike a decline; see
+`unison-ts--install-declined' and `unison-ts--install-failed'."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (require 'warnings)
+  (let ((unison-ts-grammar-install 'auto)
+        (unison-ts-grammar-revision nil)
+        (unison-ts--install-declined nil)
+        (unison-ts--install-failed nil)
+        (prompts 0)
+        (installs 0))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) nil))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) t))
+              ((symbol-function 'display-warning)
+               (lambda (&rest _) nil))
+              ((symbol-function 'treesit-install-language-grammar)
+               (lambda (&rest _) (cl-incf installs))))
+      (should-not (unison-ts-ensure-grammar))
+      (should unison-ts--install-failed)
+      (setq unison-ts-grammar-install 'prompt)
+      (should-not (unison-ts-ensure-grammar))
+      (should (= prompts 1))
+      (should (= installs 2)))))
 
 (provide 'unison-ts-mode-tests)
 ;;; unison-ts-mode-tests.el ends here
