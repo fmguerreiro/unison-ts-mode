@@ -196,15 +196,13 @@ See `treesit-simple-imenu-settings' for details.")
 (declare-function lsp-activate-on "ext:lsp-mode")
 
 (defun unison-ts-mode--eglot-contact (_interactive)
-  "Contact function for eglot to connect to UCM LSP server.
-Starts the inferior UCM if nothing is reachable on the LSP port."
-  (unison-ts--start-ucm-inferior)
-  (list "127.0.0.1" (unison-ts--resolve-lsp-port)))
+  "Contact function for eglot to connect to UCM LSP server."
+  (let ((server (unison-ts--managed-ucm)))
+    (list "127.0.0.1" (plist-get server :port))))
 
 (defun unison-ts-mode--kill-ucm-lsp (&rest _)
-  "Tear down the Emacs-managed inferior UCM process.
-Called after eglot shuts down."
-  (unison-ts--cleanup-ucm))
+  "Tear down the Emacs-managed inferior UCM process after eglot stops."
+  (unison-ts--managed-ucm 'cleanup))
 
 (declare-function eglot-shutdown "ext:eglot")
 
@@ -232,8 +230,8 @@ Call this from your init file:
    (make-lsp-client
     :new-connection (lsp-tcp-connection
                      (lambda (_port)
-                       (unison-ts--start-ucm-inferior)
-                       (cons "localhost" (unison-ts--resolve-lsp-port))))
+                       (let ((server (unison-ts--managed-ucm)))
+                         (cons "localhost" (plist-get server :port)))))
     :activation-fn (lsp-activate-on "unison")
     :server-id 'unison-lsp
     :major-modes '(unison-ts-mode)

@@ -900,6 +900,39 @@
   (when (require 'lsp-mode nil t)
     (should (assoc 'unison-ts-mode lsp-language-id-configuration))))
 
+(ert-deftest unison-ts-mode-lsp/eglot-contact-uses-managed-lifecycle ()
+  "Eglot contact gets its port from managed UCM lifecycle."
+  (require 'unison-ts-mode)
+  (require 'cl-lib)
+  (cl-letf (((symbol-function 'unison-ts--managed-ucm)
+             (lambda (&optional _) '(:port 6424 :managed t))))
+    (should (equal (unison-ts-mode--eglot-contact nil) '("127.0.0.1" 6424)))))
+
+(ert-deftest unison-ts-mode-lsp/lsp-contact-uses-managed-lifecycle ()
+  "lsp-mode contact gets its port from managed UCM lifecycle."
+  (require 'unison-ts-mode)
+  (require 'cl-lib)
+  (let (connection)
+    (cl-letf (((symbol-function 'lsp-register-client) (lambda (&rest _)))
+              ((symbol-function 'make-lsp-client) (lambda (&rest _)))
+              ((symbol-function 'lsp-tcp-connection)
+               (lambda (contact) (setq connection contact)))
+              ((symbol-function 'lsp-activate-on) (lambda (&rest _)))
+              ((symbol-function 'unison-ts--managed-ucm)
+               (lambda (&optional _) '(:port 6424 :managed t))))
+      (unison-ts-mode-setup-lsp)
+      (should (equal (funcall connection nil) '("localhost" . 6424))))))
+
+(ert-deftest unison-ts-mode-lsp/eglot-cleanup-uses-managed-lifecycle ()
+  "Eglot cleanup delegates to managed UCM lifecycle."
+  (require 'unison-ts-mode)
+  (require 'cl-lib)
+  (let (action)
+    (cl-letf (((symbol-function 'unison-ts--managed-ucm)
+               (lambda (&optional arg) (setq action arg))))
+      (unison-ts-mode--kill-ucm-lsp)
+      (should (eq action 'cleanup)))))
+
 ;;; ADT constructor tests
 
 (ert-deftest unison-ts-font-lock/adt-constructor-after-equals ()
@@ -1329,12 +1362,20 @@ at `~/.unison/' so the walk always terminates at home."
   (let ((unison-ts-lsp-port 59998))
     (should-not (unison-ts-api--lsp-running-p))))
 
-(ert-deftest unison-ts-api/repl-start-checks-lsp ()
-  "REPL start should check for LSP conflicts."
+(ert-deftest unison-ts-repl/start-uses-managed-lifecycle ()
+  "REPL starts UCM through managed lifecycle seam."
   (require 'unison-ts-repl)
-  ;; The function should exist and reference lsp-running-p
-  (should (fboundp 'unison-ts-repl--start))
-  (should (fboundp 'unison-ts-api--lsp-running-p)))
+  (require 'cl-lib)
+  (let ((calls 0))
+    (cl-letf (((symbol-function 'unison-ts-repl--get-buffer) (lambda () nil))
+              ((symbol-function 'unison-ts--managed-ucm)
+               (lambda (&optional cleanup)
+                 (unless cleanup
+                   (setq calls (1+ calls)))
+                 '(:port 5757 :managed t)))
+              ((symbol-function 'unison-ts-repl--start-mcp) (lambda () 'mcp)))
+      (should (eq (unison-ts-repl--start) 'mcp))
+      (should (= calls 1)))))
 
 ;;; MCP client tests
 
@@ -1442,7 +1483,7 @@ TUI inside Emacs."
                                       (format "*%s*" name)))))
               ((symbol-function 'sit-for) (lambda (&rest _) t)))
       (condition-case _
-          (unison-ts--start-ucm-inferior)
+          (unison-ts--managed-ucm)
         (error nil)))
     (should captured-args)
     (should-not (member "headless" (cdr captured-args)))))
@@ -1450,12 +1491,12 @@ TUI inside Emacs."
 (ert-deftest unison-ts-inferior/cleanup-on-emacs-exit ()
   "Inferior UCM process is torn down on Emacs exit."
   (require 'unison-ts-repl)
-  (should (memq 'unison-ts--cleanup-ucm kill-emacs-hook))
+  (should (memq 'unison-ts--managed-ucm-cleanup kill-emacs-hook))
   (let ((proc (start-process "test-ucm-fake" nil "sleep" "30")))
     (unwind-protect
         (let ((unison-ts--ucm-process proc))
           (should (process-live-p proc))
-          (unison-ts--cleanup-ucm)
+          (unison-ts--managed-ucm 'cleanup)
           (should-not (process-live-p proc))
           (should (null unison-ts--ucm-process)))
       (when (process-live-p proc)
@@ -1475,7 +1516,7 @@ do not leak the buffer.  Regression test for the partial-spawn path."
                    (lambda (_name _buffer _program _startfile &rest _switches)
                      ;; Return a buffer with no attached process.
                      (get-buffer-create unison-ts-inferior-ucm-buffer-name))))
-          (should-error (unison-ts--start-ucm-inferior) :type 'error)
+          (should-error (unison-ts--managed-ucm) :type 'error)
           (should (null unison-ts--ucm-process))
           (should-not (get-buffer unison-ts-inferior-ucm-buffer-name)))
       (when-let ((b (get-buffer unison-ts-inferior-ucm-buffer-name)))
@@ -1489,7 +1530,7 @@ do not leak the buffer.  Regression test for the partial-spawn path."
     (unwind-protect
         (let ((unison-ts--ucm-process nil))
           (should (buffer-live-p buf))
-          (unison-ts--cleanup-ucm)
+          (unison-ts--managed-ucm 'cleanup)
           (should-not (buffer-live-p buf)))
       (when (buffer-live-p buf) (kill-buffer buf)))))
 
@@ -1514,7 +1555,7 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
                      (setq mode-at-attach major-mode))
                    buf)))
               ((symbol-function 'sit-for) (lambda (&rest _) t)))
-      (condition-case _ (unison-ts--start-ucm-inferior) (error nil)))
+      (condition-case _ (unison-ts--managed-ucm) (error nil)))
     (should (provided-mode-derived-p mode-at-attach 'unison-ts-inferior-ucm-mode))))
 
 (ert-deftest unison-ts-inferior/start-failure-clears-state ()
@@ -1526,7 +1567,7 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
          (unison-ts-inferior-ucm-buffer-name "*ucm-test-failure*")
          (unison-ts--ucm-process nil))
     (cl-letf (((symbol-function 'sit-for) (lambda (&rest _) t)))
-      (should-error (unison-ts--start-ucm-inferior) :type 'error))
+      (should-error (unison-ts--managed-ucm) :type 'error))
     (should (null unison-ts--ucm-process))
     (should-not (get-buffer unison-ts-inferior-ucm-buffer-name))))
 
