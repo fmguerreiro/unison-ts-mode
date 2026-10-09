@@ -1368,6 +1368,44 @@ at `~/.unison/' so the walk always terminates at home."
   (require 'unison-ts-repl)
   (should (fboundp 'unison-ts-mcp--run)))
 
+(ert-deftest unison-ts-mcp/editor-and-repl-operations-match ()
+  "Matching editor and REPL actions call MCP with identical payloads."
+  (require 'unison-ts-repl)
+  (require 'cl-lib)
+  (let (calls)
+    (cl-letf (((symbol-function 'unison-ts-mcp--get-project-context)
+               (lambda ()
+                 '((projectName . "test-project")
+                   (branchName . "main"))))
+              ((symbol-function 'unison-ts-mcp--call-tool)
+               (lambda (tool arguments &optional _callback)
+                 (push (list tool arguments) calls)))
+              ((symbol-function 'read-string)
+               (lambda (&rest _) "Main.main")))
+      (with-temp-buffer
+        (insert "answer = 42")
+        (setq buffer-file-name "/tmp/test-project/main.u")
+        (unison-ts-add)
+        (unison-ts-mcp-repl--execute-async 'add "answer = 42" #'ignore)
+        (unison-ts-test)
+        (unison-ts-mcp-repl--execute-async 'test nil #'ignore)
+        (unison-ts-eval "answer")
+        (unison-ts-mcp-repl--execute-async 'watch "answer" #'ignore)
+        (unison-ts-run)
+        (unison-ts-mcp-repl--execute-async 'run '("Main.main") #'ignore)))
+    (setq calls (nreverse calls))
+    (should (equal (nth 0 calls) (nth 1 calls)))
+    (should (equal (nth 2 calls) (nth 3 calls)))
+    (should (equal (nth 4 calls) (nth 5 calls)))
+    (should (equal (nth 6 calls) (nth 7 calls)))
+    (should
+     (equal (nth 6 calls)
+            '("run"
+              ((projectContext . ((projectName . "test-project")
+                                  (branchName . "main")))
+              (mainFunctionName . "Main.main")
+              (args . [])))))))
+
 (ert-deftest unison-ts-mcp/async-uses-process-object-not-name ()
   "`unison-ts-mcp--call' must send to the process object returned
 by `make-process', not look it up by the name string \"ucm-mcp\".
