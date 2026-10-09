@@ -228,31 +228,48 @@ Signals an error if no project context is found."
   `((projectContext . ((projectName . ,project-name)
                        (branchName . ,branch-name)))))
 
-(defun unison-ts-mcp--update-definitions (code)
-  "Update definitions with CODE via MCP."
+(defun unison-ts-mcp--execute-operation (operation data &optional callback)
+ "Execute MCP OPERATION with DATA and optional CALLBACK."
   (unison-ts-mcp--with-project-context
    (lambda (project-name branch-name)
-     (unison-ts-mcp--call-tool
-      "update-definitions"
-      (append (unison-ts-mcp--make-project-context project-name branch-name)
-              `((code . ((text . ,code)))))))))
+     (let ((context (unison-ts-mcp--make-project-context project-name branch-name))
+           (tool-and-arguments
+            (pcase operation
+              ('update-definitions
+               `("update-definitions" . ((code . ((text . ,data))))))
+              ('run-tests
+               `("run-tests" . ,(when data `((subnamespace . ,data)))))
+              ('run
+               `("run" . ((mainFunctionName . ,(car data))
+                           (args . ,(or (cdr data) [])))))
+              ('typecheck-code
+               `("typecheck-code" . ((code . ((sourceCode . ,data))))))
+              ('view-definitions
+               `("view-definitions" . ((names . ,data))))
+              ('search-definitions-by-name
+               `("search-definitions-by-name" . ((query . ,data))))
+              ('search-by-type
+               `("search-by-type" . ((query . ,data))))
+              ('docs
+               `("docs" . ((name . ,data))))
+              (_
+               (error "Unknown MCP operation: %s" operation)))))
+       (unison-ts-mcp--call-tool
+        (car tool-and-arguments)
+        (append context (cdr tool-and-arguments))
+        callback)))))
+
+(defun unison-ts-mcp--update-definitions (code)
+  "Update definitions with CODE via MCP."
+  (unison-ts-mcp--execute-operation 'update-definitions code))
 
 (defun unison-ts-mcp--run-tests ()
   "Run tests in current project via MCP."
-  (unison-ts-mcp--with-project-context
-   (lambda (project-name branch-name)
-     (unison-ts-mcp--call-tool
-      "run-tests"
-      (unison-ts-mcp--make-project-context project-name branch-name)))))
+  (unison-ts-mcp--execute-operation 'run-tests nil))
 
 (defun unison-ts-mcp--run (definition)
   "Run DEFINITION in current project via MCP."
-  (unison-ts-mcp--with-project-context
-   (lambda (project-name branch-name)
-     (unison-ts-mcp--call-tool
-      "run"
-      (append (unison-ts-mcp--make-project-context project-name branch-name)
-              `((definition . ,definition)))))))
+  (unison-ts-mcp--execute-operation 'run (list definition)))
 
 ;;; UCM Headless Detection
 
@@ -536,58 +553,35 @@ CALLBACK is called with the result string."
         (repl-buffer (current-buffer)))
     (if (eq command 'help)
         (funcall callback unison-ts-mcp-repl--help-text)
-      (unison-ts-mcp--with-project-context
-       (lambda (project-name branch-name)
-         (let* ((ctx (unison-ts-mcp--make-project-context project-name branch-name))
-                (wrapped-callback (lambda (result)
-                                    (with-current-buffer repl-buffer
-                                      (funcall callback (unison-ts-mcp-repl--format-result result))))))
-           (pcase command
-             ('watch
-              (unison-ts-mcp--call-tool
-               "typecheck-code"
-               (append ctx `((code . ((sourceCode . ,(if (string-prefix-p ">" args)
-                                                         args
-                                                       (concat "> " args)))))))
-               wrapped-callback))
-             ('add
-              (unison-ts-mcp--call-tool
-               "update-definitions"
-               (append ctx `((code . ((text . ,args)))))
-               wrapped-callback))
-             ('test
-              (unison-ts-mcp--call-tool
-               "run-tests"
-               (append ctx (when args `((subnamespace . ,args))))
-               wrapped-callback))
-             ('run
-              (unison-ts-mcp--call-tool
-               "run"
-               (append ctx `((mainFunctionName . ,(car args))
-                             (args . ,(or (cdr args) []))))
-               wrapped-callback))
-             ('view
-              (unison-ts-mcp--call-tool
-               "view-definitions"
-               (append ctx `((names . ,args)))
-               wrapped-callback))
-             ('find-name
-              (unison-ts-mcp--call-tool
-               "search-definitions-by-name"
-               (append ctx `((query . ,args)))
-               wrapped-callback))
-             ('find-type
-              (unison-ts-mcp--call-tool
-               "search-by-type"
-               (append ctx `((query . ,args)))
-               wrapped-callback))
-             ('docs
-              (unison-ts-mcp--call-tool
-               "docs"
-               (append ctx `((name . ,args)))
-               wrapped-callback))
-             (_
-              (funcall callback (format "Unknown command: %s\nType 'help' for available commands." command))))))))))
+      (let ((wrapped-callback
+             (lambda (result)
+               (with-current-buffer repl-buffer
+                 (funcall callback (unison-ts-mcp-repl--format-result result))))))
+        (pcase command
+          ('watch
+           (unison-ts-mcp--execute-operation
+            'typecheck-code
+            (if (string-prefix-p ">" args) args (concat "> " args))
+            wrapped-callback))
+          ('add
+           (unison-ts-mcp--execute-operation 'update-definitions args wrapped-callback))
+          ('test
+           (unison-ts-mcp--execute-operation 'run-tests args wrapped-callback))
+          ('run
+           (unison-ts-mcp--execute-operation 'run args wrapped-callback))
+          ('view
+           (unison-ts-mcp--execute-operation 'view-definitions args wrapped-callback))
+          ('find-name
+           (unison-ts-mcp--execute-operation
+            'search-definitions-by-name args wrapped-callback))
+          ('find-type
+           (unison-ts-mcp--execute-operation 'search-by-type args wrapped-callback))
+          ('docs
+           (unison-ts-mcp--execute-operation 'docs args wrapped-callback))
+          (_
+           (funcall callback
+                    (format "Unknown command: %s\nType 'help' for available commands."
+                            command))))))))
 
 (defun unison-ts-mcp-repl--format-result (result)
   "Format MCP RESULT for display in REPL."
@@ -980,18 +974,11 @@ Displays result with TITLE when complete."
   (unless buffer-file-name
     (user-error "Buffer is not visiting a file"))
   (let ((code (buffer-substring-no-properties (point-min) (point-max)))
-        (ctx (unison-ts-mcp--get-project-context))
         (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (let ((project-name (alist-get 'projectName ctx))
-          (branch-name (alist-get 'branchName ctx)))
-      (unison-ts-mcp--call-tool
-       "update-definitions"
-       (append (unison-ts-mcp--make-project-context project-name branch-name)
-               `((code . ((text . ,code)))))
-       (lambda (result)
-         (unison-ts--display-mcp-result result title position))))))
+    (unison-ts-mcp--execute-operation
+     'update-definitions code
+     (lambda (result)
+       (unison-ts--display-mcp-result result title position)))))
 
 ;;;###autoload
 (defun unison-ts-add ()
@@ -1009,15 +996,9 @@ Displays result with TITLE when complete."
 (defun unison-ts-test ()
   "Run tests in the current project via MCP."
   (interactive)
-  (let ((ctx (unison-ts-mcp--get-project-context))
-        (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "run-tests"
-     (unison-ts-mcp--make-project-context
-      (alist-get 'projectName ctx)
-      (alist-get 'branchName ctx))
+  (let ((position (point)))
+    (unison-ts-mcp--execute-operation
+     'run-tests nil
      (lambda (result)
        (unison-ts--display-mcp-result result "test" position)))))
 
@@ -1027,16 +1008,9 @@ Displays result with TITLE when complete."
 EXPR is evaluated using the typecheck-code tool with > prefix.
 Works for both pure functions and IO actions."
   (interactive "sExpression: ")
-  (let ((ctx (unison-ts-mcp--get-project-context))
-        (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "typecheck-code"
-     (append (unison-ts-mcp--make-project-context
-              (alist-get 'projectName ctx)
-              (alist-get 'branchName ctx))
-             `((code . ((sourceCode . ,(concat "> " expr))))))
+  (let ((position (point)))
+    (unison-ts-mcp--execute-operation
+     'typecheck-code (concat "> " expr)
      (lambda (result)
        (unison-ts--display-mcp-result result "eval" position)))))
 
@@ -1046,17 +1020,9 @@ Works for both pure functions and IO actions."
 For pure expressions, use `unison-ts-eval' instead."
   (interactive)
   (let ((term (read-string "IO action to run: "))
-        (ctx (unison-ts-mcp--get-project-context))
         (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "run"
-     (append (unison-ts-mcp--make-project-context
-              (alist-get 'projectName ctx)
-              (alist-get 'branchName ctx))
-             `((mainFunctionName . ,term)
-               (args . [])))
+    (unison-ts-mcp--execute-operation
+     'run (list term)
      (lambda (result)
        (unison-ts--display-mcp-result result "run" position)))))
 
@@ -1067,16 +1033,9 @@ For pure expressions, use `unison-ts-eval' instead."
   (unless buffer-file-name
     (user-error "Buffer is not visiting a file"))
   (let ((code (buffer-substring-no-properties (point-min) (point-max)))
-        (ctx (unison-ts-mcp--get-project-context))
         (position (point)))
-    (unless ctx
-      (user-error "No Unison project context found. Open a project first"))
-    (unison-ts-mcp--call-tool
-     "typecheck-code"
-     (append (unison-ts-mcp--make-project-context
-              (alist-get 'projectName ctx)
-              (alist-get 'branchName ctx))
-             `((code . ((sourceCode . ,code)))))
+    (unison-ts-mcp--execute-operation
+     'typecheck-code code
      (lambda (result)
        (unison-ts--display-mcp-result result "watch" position)))))
 
