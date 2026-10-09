@@ -585,37 +585,18 @@ CALLBACK is called with the result string."
 
 (defun unison-ts-mcp-repl--format-result (result)
   "Format MCP RESULT for display in REPL."
-  (if result
-      (let* ((content-array (alist-get 'content result))
-             (content (if (vectorp content-array)
-                          (aref content-array 0)
-                        (car content-array)))
-             (text (alist-get 'text content)))
-        (if text
-            (let ((parsed (condition-case nil
-                              (json-read-from-string text)
-                            (error text))))
-              (if (and (listp parsed) (not (stringp parsed)))
-                  ;; Structured response - deduplicate messages and filter errors from outputs
-                  (let* ((errors (unison-ts--dedupe-messages (alist-get 'errorMessages parsed)))
-                         (error-keys (mapcar #'string-trim errors))
-                         (outputs (seq-filter
-                                   (lambda (m)
-                                     (and (not (string-match-p "^Loading changes" m))
-                                          (not (string-match-p "^No changes found" m))
-                                          (not (member (string-trim m) error-keys))))
-                                   (unison-ts--dedupe-messages (alist-get 'outputMessages parsed)))))
-                    (concat
-                     (when (and errors (> (length errors) 0))
-                       (concat "Errors:\n"
-                               (mapconcat #'identity errors "\n")
-                               "\n"))
-                     (when (and outputs (> (length outputs) 0))
-                       (mapconcat #'identity outputs "\n"))))
-                ;; Plain text
-                (format "%s" parsed)))
-          "(no content)"))
-    "(no result)"))
+  (let* ((normalized (unison-ts-mcp--normalize-result result))
+         (status (plist-get normalized :status))
+         (errors (plist-get normalized :errors))
+         (outputs (plist-get normalized :outputs)))
+    (pcase status
+      ('missing-result "(no result)")
+      ('missing-content "(no content)")
+      (_ (concat
+          (when errors
+            (concat "Errors:\n" (string-join errors "\n") "\n"))
+          (when outputs
+            (string-join outputs "\n")))))))
 
 (defun unison-ts-mcp-repl-send ()
   "Send current input to UCM via MCP."
@@ -885,66 +866,73 @@ otherwise use `display-buffer'."
   "Send COMMAND to the UCM REPL and switch to it."
   (unison-ts--send-to-repl--impl command t))
 
-(defun unison-ts--parse-mcp-output (text)
-  "Parse MCP output TEXT which may be JSON-encoded UCM response."
-  (condition-case nil
-      (let ((parsed (json-read-from-string text)))
+
+(defun unison-ts-mcp--normalize-messages (messages)
+  "Prepare MCP messages for shared presentation."
+  (let (normalized)
+    (dolist (message (cond
+                      ((vectorp messages) (append messages nil))
+                      ((listp messages) messages)
+                      ((stringp messages) (list messages))))
+      (when (stringp message)
+        (let ((message (string-trim message)))
+          (unless (or (string-empty-p message) (member message normalized))
+            (push message normalized)))))
+    (nreverse normalized)))
+
+(defun unison-ts-mcp--normalize-result (result)
+  "Give every MCP presentation path the same filtered response."
+  (let* ((content-array (and (listp result) (alist-get 'content result)))
+         (content (cond
+                   ((vectorp content-array)
+                    (and (> (length content-array) 0) (aref content-array 0)))
+                   ((listp content-array) (car content-array))))
+         (text (and content (alist-get 'text content))))
+    (cond
+     ((null result) '(:status missing-result))
+     ((null text) '(:status missing-content))
+     (t
+      (let ((parsed (condition-case nil
+                        (json-read-from-string text)
+                      (error text))))
         (if (and (listp parsed)
+                 (not (stringp parsed))
                  (or (alist-get 'errorMessages parsed)
                      (alist-get 'outputMessages parsed)))
-            parsed
-          text))
-    (error text)))
-
-(defun unison-ts--dedupe-messages (messages)
-  "Remove duplicate MESSAGES, normalizing whitespace for comparison."
-  (let ((seen (make-hash-table :test 'equal))
-        (result nil))
-    (dolist (msg (append messages nil))
-      (let ((key (string-trim msg)))
-        (unless (gethash key seen)
-          (puthash key t seen)
-          (push msg result))))
-    (nreverse result)))
+            (let* ((errors (unison-ts-mcp--normalize-messages
+                            (alist-get 'errorMessages parsed)))
+                   (outputs (seq-filter
+                             (lambda (message)
+                               (and (not (member message errors))
+                                    (not (string-match-p
+                                          "\\`\\(?:Loading changes\\|No changes found\\|Run `update` to apply\\)"
+                                          message))))
+                             (unison-ts-mcp--normalize-messages
+                              (alist-get 'outputMessages parsed)))))
+              (list :status 'structured :errors errors :outputs outputs))
+          (list :status 'text
+                :outputs (unison-ts-mcp--normalize-messages
+                          (list (format "%s" parsed))))))))))
 
 (defun unison-ts--display-mcp-result (result title at)
   "Display MCP RESULT appropriately based on content.
 Short success messages go to minibuffer, errors/long output to a buffer.
 AT is a buffer position; when the result is a success, an inline overlay
 is shown at that position in addition to the minibuffer message."
-  (let ((overlay-position at))
-    (if (and result (listp result))
-        (let* ((content-array (alist-get 'content result))
-               (content (if (vectorp content-array)
-                            (aref content-array 0)
-                          (car content-array)))
-               (text (alist-get 'text content))
-               (parsed (when text (unison-ts--parse-mcp-output text))))
-          (if (and (listp parsed) (not (stringp parsed)))
-              (let* ((errors (unison-ts--dedupe-messages (alist-get 'errorMessages parsed)))
-                     (error-keys (mapcar #'string-trim errors))
-                     (outputs (seq-filter
-                               (lambda (msg)
-                                 (and (not (string-match-p "^Loading changes" msg))
-                                      (not (string-match-p "^No changes found" msg))
-                                      ;; Filter misleading "Run `update`" - MCP already commits
-                                      (not (string-match-p "Run `update` to apply" msg))
-                                      (not (member (string-trim msg) error-keys))))
-                               (unison-ts--dedupe-messages (alist-get 'outputMessages parsed)))))
-                (if (= (length errors) 0)
-                    ;; Success → minibuffer + optional overlay
-                    (let ((output-str (string-join outputs " ")))
-                      (if (string-match-p "^\\+" output-str)
-                          ;; Definitions were added - show what was added
-                          (message "UCM: Added definitions. %s" output-str)
-                        (message "UCM: %s" output-str))
-                      (unison-ts--overlay-show overlay-position output-str))
-                  ;; Errors → buffer
-                  (unison-ts--display-in-buffer title errors outputs)))
-            ;; Non-parsed output → buffer
-            (unison-ts--display-in-buffer title nil (list (format "%s" parsed)))))
-      ;; Fallback → buffer
-      (unison-ts--display-in-buffer title nil (list (format "%S" result))))))
+  (let* ((normalized (unison-ts-mcp--normalize-result result))
+         (status (plist-get normalized :status))
+         (errors (plist-get normalized :errors))
+         (outputs (plist-get normalized :outputs)))
+    (if (eq status 'structured)
+        (if errors
+            (unison-ts--display-in-buffer title errors outputs)
+          (let ((output-str (string-join outputs " ")))
+            (if (string-match-p "^\\+" output-str)
+                (message "UCM: Added definitions. %s" output-str)
+              (message "UCM: %s" output-str))
+            (unison-ts--overlay-show at output-str)))
+      (unison-ts--display-in-buffer
+       title nil (or outputs (list (format "%S" result)))))))
 
 (defun unison-ts--display-in-buffer (title errors outputs)
   "Display ERRORS and OUTPUTS in a *UCM: TITLE* buffer.

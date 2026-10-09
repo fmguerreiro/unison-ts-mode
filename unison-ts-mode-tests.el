@@ -1683,6 +1683,39 @@ on `comint-output-filter' that reads the marker (e.g. Doom's
       (unison-ts--overlay-show 5 "42")
       (should-not (overlays-in 5 5)))))
 
+(ert-deftest unison-ts-mcp/normalizes-structured-result-messages ()
+  (require 'unison-ts-repl)
+  (should
+   (equal
+    (unison-ts-mcp--normalize-result
+     `((content . [((type . "text")
+                    (text . "{\"errorMessages\":[\" type error \",\"type error\"],\"outputMessages\":[\" Loading changes...\",\"No changes found\",\"Run `update` to apply changes\",\" type error \",\" value \",\"value\",\"   \"]}"))])))
+    '(:status structured :errors ("type error") :outputs ("value")))))
+
+(ert-deftest unison-ts-mcp/repl-formats-normalized-result ()
+  (require 'unison-ts-repl)
+  (should
+   (equal
+    (unison-ts-mcp-repl--format-result
+     `((content . [((type . "text")
+                    (text . "{\"errorMessages\":[\" type error \"],\"outputMessages\":[\"Loading changes...\",\" value \",\"type error\"]}"))])))
+    "Errors:\ntype error\nvalue")))
+
+(ert-deftest unison-ts-mcp/one-shot-presentation-uses-normalized-output ()
+  (require 'unison-ts-repl)
+  (with-temp-buffer
+    (insert "hello")
+    (let ((unison-ts-eval-overlay t)
+          (unison-ts-eval-overlay-format " => %s")
+          (result `((content . [((type . "text")
+                                 (text . "{\"errorMessages\":[],\"outputMessages\":[\"Loading changes...\",\" value \",\"value\"]}"))]))))
+      (unison-ts--display-mcp-result result "eval" 5)
+      (should
+       (equal
+        (substring-no-properties
+         (overlay-get (car (overlays-in 5 5)) 'after-string))
+        " => value")))))
+
 (ert-deftest unison-ts-overlay/display-mcp-result-success-calls-overlay ()
   "Success path of unison-ts--display-mcp-result must invoke overlay show."
   (require 'unison-ts-repl)
