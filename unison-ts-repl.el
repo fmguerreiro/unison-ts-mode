@@ -750,7 +750,7 @@ Returns nil if no REPL buffer exists or it's not usable."
                 (list :port port :managed t))
             (error
              (unison-ts--stop-managed-ucm)
-             (signal (car err) (cdr err)))))))))
+             (signal (car err) (cdr err))))))))))
 
 (defun unison-ts--managed-ucm-cleanup ()
   "Stop the UCM server managed by Emacs."
