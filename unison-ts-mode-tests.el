@@ -112,7 +112,7 @@
 
 (ert-deftest unison-ts-font-lock/keyword-let ()
   "Keyword 'let' should be highlighted."
-  (unison-ts-mode-tests--with-buffer "foo =\n  let x = 1\n  x"
+  (unison-ts-mode-tests--with-buffer "foo =\n  let\n    x = 1\n    x"
     (should (eq (unison-ts-mode-tests--face-at-string "let") 'font-lock-keyword-face))))
 
 (ert-deftest unison-ts-font-lock/keyword-cases ()

@@ -43,18 +43,16 @@ fetches from any host."
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision "28be881547089225cd5253ead9db0e0d0e2e7a1f"
+(defcustom unison-ts-grammar-revision "bd385224a50baa039d0390fc749be0a0a3071b75"
   "Git revision (branch, tag, or commit) for the grammar.
 If nil, uses the default branch.
-Pinned to upstream commit 28be881, which fixes trailing (end-of-line)
-comments.  Revisions before it lex a trailing `--' as a symbolic
-operator and the comment text as identifiers, derailing the parse for
-the rest of the file.
-This pin descends from b2ae57b, where upstream regenerated the parser
-with a newer tree-sitter CLI.  Later revisions in that series misparse
-`let'/`handle' expressions: at 10365cc the handle-with and keyword-let
-tests fail.  The Emacs 29 CI jobs are the gate on any bump, and the
-revision is repeated in README.md and CLAUDE.md."
+Pinned to upstream commit bd38522 (grammar 3.0.0).  Since 3.0.0,
+keywords and the `=', `:', `->' and `|' delimiters are anonymous nodes,
+so font-lock and indent rules match them as strings.  Revisions before
+28be881 lex a trailing `--' as a symbolic operator and the comment text
+as identifiers, derailing the parse for the rest of the file.
+The Emacs 29 CI jobs are the gate on any bump, and the revision is
+repeated in README.md and CLAUDE.md."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)

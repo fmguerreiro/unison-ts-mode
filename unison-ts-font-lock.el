@@ -29,18 +29,18 @@
 
 ;; @ref https://www.unison-lang.org/learn/language-reference/identifiers/#reserved-words
 (defvar unison-ts-font-lock--keywords
-  '((use) (structural) (unique) (kw_if) (kw_then) (kw_else)
-    (ability) (cases) (where) (do) (handle)
-    (kw_let) (match) (with) (kw_typelink) (kw_termlink)
-    (kw_forall) (type_kw) (otherwise)))
+  '("use" "structural" "unique" "if" "then" "else"
+    "ability" "cases" "where" "do" "handle"
+    "let" "match" "with" "typeLink" "termLink"
+    "forall" "∀" "type" "otherwise"))
 
 (defvar unison-ts-font-lock--constants
   '((nat) (int) (float) (literal_boolean) (literal_byte)
     (literal_hex) (hash_qualifier) (built_in_hash)))
 
 (defvar unison-ts-font-lock-operators
-  '((or) (and) (pipe) (operator) (kw_equals)
-    (type_signature_colon) (arrow_symbol) (cons) (snoc)))
+  '((or) (and) "|" (operator) "="
+    ":" "->" (cons) (snoc)))
 
 ;; possible faces
 ;; @ref: https://www.gnu.org/software/emacs/manual/html_node/elisp/Faces-for-Font-Lock.html
@@ -67,17 +67,17 @@
         :language unison
         ([(constructor :anchor (regular_identifier) @font-lock-function-name-face)
           ;; Type constructors in ADT definitions (after = or |)
-          (type_declaration (kw_equals) :anchor (regular_identifier) @font-lock-type-face)
-          (type_declaration (pipe) :anchor (regular_identifier) @font-lock-type-face)
+          (type_declaration "=" :anchor (regular_identifier) @font-lock-type-face)
+          (type_declaration "|" :anchor (regular_identifier) @font-lock-type-face)
           ;; Ability operation names
           (ability_declaration (constructor (constructor_name) @font-lock-function-name-face))
           ;; Record field names
           (record_field (field_name) @font-lock-property-name-face)
           ;; Pattern variables bind names, so they are declarations rather
           ;; than uses, at any nesting depth: (a, (b, c)) = (1, (2, 3))
-          (var_or_as (regular_identifier) @font-lock-variable-name-face)
+          (pattern (var_or_nullary_ctor (regular_identifier) @font-lock-variable-name-face))
           ;; declarations with no args are highlighted as variable declarations
-          (term_definition name: (regular_identifier) @font-lock-variable-name-face :anchor (kw_equals))
+          (term_definition name: (regular_identifier) @font-lock-variable-name-face :anchor "=")
           ;; by default, declarations are highlighted as function declarations
           (term_definition name: (regular_identifier) @font-lock-function-name-face)
           (type_signature term_name: (regular_identifier) @font-lock-function-name-face)])

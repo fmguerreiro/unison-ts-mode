@@ -78,10 +78,10 @@ Returns BOL if no term_definition is found."
   `((unison
      ((parent-is "unison") column-0 0)
 
-     ((and (node-is "kw_let") (parent-is "exp_let"))
+     ((and (node-is "let") (parent-is "exp_let"))
       unison-ts--let-binding-anchor ,unison-ts-indent-offset)
 
-     ((and (parent-is "exp_let") (not (node-is "kw_let")))
+     ((and (parent-is "exp_let") (not (node-is "let")))
       unison-ts--let-binding-anchor ,(* 2 unison-ts-indent-offset))
 
      ((and (parent-is "term_definition") (node-is "pattern"))
@@ -91,8 +91,8 @@ Returns BOL if no term_definition is found."
 
      ((parent-is "ability_declaration") parent-bol ,unison-ts-indent-offset)
 
-     ((node-is "kw_then") parent 0)
-     ((node-is "kw_else") parent 0)
+     ((node-is "then_block") parent 0)
+     ((node-is "else_block") parent 0)
 
      ((parent-is "exp_if") parent-bol ,unison-ts-indent-offset)
 

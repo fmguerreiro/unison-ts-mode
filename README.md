@@ -213,7 +213,7 @@ If auto-install fails:
 ```sh
 git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
-git checkout 28be881547089225cd5253ead9db0e0d0e2e7a1f
+git checkout bd385224a50baa039d0390fc749be0a0a3071b75
 
 # Determine shared library extension
 if [ "$(uname)" = "Darwin" ]; then soext="dylib"

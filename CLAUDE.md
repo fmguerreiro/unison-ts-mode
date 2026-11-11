@@ -40,13 +40,13 @@ emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.e
 
 ## Tree-sitter Grammar
 
-Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `28be881547089225cd5253ead9db0e0d0e2e7a1f` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
+Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `bd385224a50baa039d0390fc749be0a0a3071b75` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
 
-The pin is `28be881` ("fix(comment) - instance where in-line comment not detected by scanner"). Earlier revisions lex a trailing `--` as a symbolic operator and the comment text as identifiers, which derails the parse for the rest of the file and paints most of the buffer with `font-lock-warning-face`.
+The pin is `bd38522` (grammar 3.0.0, adds GADT syntax). As of 3.0.0 the keywords (`if`, `let`, `use`, `type`, ...) and the `=`, `:`, `->` and `|` delimiters are anonymous nodes, so font-lock and indent rules must match them as strings (`"let"`), not as named nodes (`(kw_let)`); `if`/`then`/`else` bodies are wrapped in `if_block`/`then_block`/`else_block`, and pattern variables are `(pattern (var_or_nullary_ctor ...))` instead of `var_or_as`. Revisions before `28be881` lex a trailing `--` as a symbolic operator and the comment text as identifiers, which derails the parse for the rest of the file and paints most of the buffer with `font-lock-warning-face`.
 
 The revision is duplicated in three places that must be kept in sync: `unison-ts-grammar-revision` (`unison-ts-install.el`), the manual build instructions in `README.md`, and the paragraph above in this file. The `Build Unison grammar` step in `.github/workflows/ci.yml` derives the value from `unison-ts-install.el` at run time, so CI always builds the revision the package installs.
 
-Do not bump the pin without a green Emacs 29 CI run and a clean ERT suite. This pin descends from `b2ae57b`, where upstream regenerated the parser with a newer tree-sitter CLI; later revisions in that series misparse `let`/`handle`, and at `10365cc` the `handle-with` and `keyword-let` tests fail.
+Do not bump the pin without a green Emacs 29 CI run and a clean ERT suite. Intermediate revisions between `b2ae57b` and `bd38522` misparse `let`/`handle` (at `10365cc` the `handle-with` and `keyword-let` tests fail). The 3.0.0 grammar rejects `let x = 1` as the last line of a `let` block, matching UCM ("The last element of a block must be an expression").
 
 When changing the grammar pin or font-lock queries, verify syntax claims against UCM rather than against the grammar itself, e.g. `ucm transcript.fork` on a scratch markdown file. Checking a construct against the grammar you are testing is circular, and the grammar is known to diverge from the compiler in both directions: `662bf52` accepts `{ pure y }`, which UCM rejects, and both revisions reject `Right ()`, which UCM accepts.
 
