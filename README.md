@@ -189,9 +189,13 @@ Check `~/.emacs.d/tree-sitter/` or `treesit-extra-load-path` contains the compil
 
 **Highlighting is wrong after an upgrade:**
 
-The grammar is installed once and never re-checked, so a release that
-changes the pinned revision does not reach an existing install. Run `M-x
-unison-ts-install-grammar` to rebuild at the current pin.
+The mode checks installed grammar compatibility. If the grammar is incompatible,
+it warns and leaves tree-sitter disabled instead of loading incompatible
+highlighting rules. Existing grammars are not rebuilt automatically, even with
+`unison-ts-grammar-install` set to `'auto`. Run `M-x unison-ts-install-grammar`
+to rebuild at the current pin, then reopen the buffer. If the warning persists,
+restart Emacs and check `treesit-extra-load-path` for an older grammar taking
+precedence.
 
 **LSP connection refused:**
 
@@ -213,7 +217,7 @@ If auto-install fails:
 ```sh
 git clone https://github.com/kylegoetz/tree-sitter-unison.git
 cd tree-sitter-unison
-git checkout 28be881547089225cd5253ead9db0e0d0e2e7a1f
+git checkout bd385224a50baa039d0390fc749be0a0a3071b75
 
 # Determine shared library extension
 if [ "$(uname)" = "Darwin" ]; then soext="dylib"

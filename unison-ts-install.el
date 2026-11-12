@@ -43,18 +43,9 @@ fetches from any host."
   :type 'string
   :group 'unison-ts)
 
-(defcustom unison-ts-grammar-revision "28be881547089225cd5253ead9db0e0d0e2e7a1f"
+(defcustom unison-ts-grammar-revision "bd385224a50baa039d0390fc749be0a0a3071b75"
   "Git revision (branch, tag, or commit) for the grammar.
-If nil, uses the default branch.
-Pinned to upstream commit 28be881, which fixes trailing (end-of-line)
-comments.  Revisions before it lex a trailing `--' as a symbolic
-operator and the comment text as identifiers, derailing the parse for
-the rest of the file.
-This pin descends from b2ae57b, where upstream regenerated the parser
-with a newer tree-sitter CLI.  Later revisions in that series misparse
-`let'/`handle' expressions: at 10365cc the handle-with and keyword-let
-tests fail.  The Emacs 29 CI jobs are the gate on any bump, and the
-revision is repeated in README.md and CLAUDE.md."
+If nil, uses the default branch."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
@@ -89,15 +80,7 @@ this flag is checked again.")
                  (string-trim (buffer-string))))))))
 
 (defun unison-ts--install-grammar ()
-  "Fetch the pinned grammar revision and install it into tree-sitter.
-`git clone -b' resolves only branch and tag names, never a raw commit
-SHA, so this fetches the revision into a temporary directory and points
-a local branch at it before registering that branch as the source.  The
-branch exists for Emacs 29, which clones the source with `-b'; Emacs 30
-runs `git checkout' in place and would take the SHA directly.
-
-With no revision there is nothing to pin, so treesit clones the
-repository's default branch directly."
+  "Install the configured revision using a local branch for Emacs 29."
   (if (null unison-ts-grammar-revision)
       (let ((treesit-language-source-alist
              (list (list 'unison unison-ts-grammar-repository))))
@@ -150,13 +133,30 @@ that the install call signaled or returned non-nil."
        :error)
       nil)))
 
+(defun unison-ts--grammar-compatible-p ()
+  "Return non-nil for a compatible grammar, otherwise warn how to rebuild it."
+  (condition-case nil
+      (progn
+        (treesit-query-compile
+         'unison
+         '((if_block) (then_block) (else_block)
+           (pattern (var_or_nullary_ctor)) (term_definition "="))
+         t)
+        t)
+    (treesit-query-error
+     (display-warning
+      'unison-ts
+      (concat "The installed Unison grammar is incompatible with this mode.  "
+              "Run M-x unison-ts-install-grammar to rebuild it.  If the warning persists, "
+              "restart Emacs and check treesit-extra-load-path for an older grammar.")
+      :warning)
+     nil)))
+
 (defun unison-ts-ensure-grammar ()
-  "Ensure tree-sitter grammar for Unison is installed.
-Return t if the grammar is available, nil if it is unavailable and
-installation was declined, disabled, or failed."
+  "Return non-nil for a compatible grammar, installing one when configured."
   (cond
    ((treesit-language-available-p 'unison)
-    t)
+    (unison-ts--grammar-compatible-p))
 
    ;; Must precede the mode arms so a decline suppresses a later
    ;; auto-install too; see `unison-ts--install-declined'.
@@ -166,13 +166,15 @@ installation was declined, disabled, or failed."
    ((eq unison-ts-grammar-install 'auto)
     ;; See `unison-ts--install-failed' for why a failure latches here.
     (unless unison-ts--install-failed
-      (or (unison-ts-install-grammar)
+      (or (and (unison-ts-install-grammar)
+               (unison-ts--grammar-compatible-p))
           (progn (setq unison-ts--install-failed t) nil))))
 
    ((eq unison-ts-grammar-install 'prompt)
     ;; Only an explicit decline latches; see `unison-ts--install-declined'.
     (if (y-or-n-p "Install Unison grammar for syntax highlighting? ")
-        (unison-ts-install-grammar)
+        (and (unison-ts-install-grammar)
+             (unison-ts--grammar-compatible-p))
       (setq unison-ts--install-declined t)
       nil))
 

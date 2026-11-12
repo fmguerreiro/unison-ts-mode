@@ -40,15 +40,15 @@ emacs --batch -L . -f batch-byte-compile unison-ts-mode.el unison-ts-font-lock.e
 
 ## Tree-sitter Grammar
 
-Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `28be881547089225cd5253ead9db0e0d0e2e7a1f` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
+Requires the Unison tree-sitter grammar from `https://github.com/kylegoetz/tree-sitter-unison`, pinned to commit `bd385224a50baa039d0390fc749be0a0a3071b75` via `unison-ts-grammar-revision`. Grammar installs automatically when opening a `.u` file (controlled by `unison-ts-grammar-install` customization).
 
-The pin is `28be881` ("fix(comment) - instance where in-line comment not detected by scanner"). Earlier revisions lex a trailing `--` as a symbolic operator and the comment text as identifiers, which derails the parse for the rest of the file and paints most of the buffer with `font-lock-warning-face`.
+Keywords (`if`, `let`, `use`, `type`, ...) and delimiters (`=`, `:`, `->`, `|`) are anonymous nodes, so font-lock and indent rules match them as strings. Conditional bodies use `if_block`, `then_block`, and `else_block` wrappers. Pattern variables use `(pattern (var_or_nullary_ctor ...))`.
 
 The revision is duplicated in three places that must be kept in sync: `unison-ts-grammar-revision` (`unison-ts-install.el`), the manual build instructions in `README.md`, and the paragraph above in this file. The `Build Unison grammar` step in `.github/workflows/ci.yml` derives the value from `unison-ts-install.el` at run time, so CI always builds the revision the package installs.
 
-Do not bump the pin without a green Emacs 29 CI run and a clean ERT suite. This pin descends from `b2ae57b`, where upstream regenerated the parser with a newer tree-sitter CLI; later revisions in that series misparse `let`/`handle`, and at `10365cc` the `handle-with` and `keyword-let` tests fail.
+Do not bump the pin without a green Emacs 29 CI run and a clean ERT suite. A `let` block must end with an expression, not a binding; UCM reports "The last element of a block must be an expression" otherwise.
 
-When changing the grammar pin or font-lock queries, verify syntax claims against UCM rather than against the grammar itself, e.g. `ucm transcript.fork` on a scratch markdown file. Checking a construct against the grammar you are testing is circular, and the grammar is known to diverge from the compiler in both directions: `662bf52` accepts `{ pure y }`, which UCM rejects, and both revisions reject `Right ()`, which UCM accepts.
+When changing the grammar pin or font-lock queries, verify syntax claims against UCM rather than against the grammar itself, e.g. `ucm transcript.fork` on a scratch markdown file. The compiler defines valid Unison syntax; acceptance by the grammar alone is not proof.
 
 ## UCM Keybindings
 
