@@ -172,10 +172,7 @@
     (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))))
 
 (ert-deftest unison-ts-font-lock/comment-trailing-after-term ()
-  "Trailing (end-of-line) comments should be highlighted.
-Grammar revisions before 28be881 lex a trailing `--' as a symbolic
-operator and the comment text as identifiers, so the comment renders as
-code and the rest of the file parses as an error."
+  "Trailing (end-of-line) comments should be highlighted."
   (unison-ts-mode-tests--with-buffer "x = 1 -- trailing comment"
     (goto-char (point-min))
     (search-forward "--")
@@ -183,9 +180,7 @@ code and the rest of the file parses as an error."
     (should (eq (get-text-property (point) 'face) 'font-lock-comment-face))))
 
 (ert-deftest unison-ts-font-lock/comment-trailing-in-ability ()
-  "Trailing comments inside an ability declaration should be highlighted.
-This is the shape that regressed first: the mis-lexed `--' and the words
-after it rendered as code."
+  "Trailing comments inside an ability declaration should be highlighted."
   (unison-ts-mode-tests--with-buffer
       "ability Git where\n  status : [Text]    -- uncommitted paths\n  currentBranch : Text"
     (goto-char (point-min))

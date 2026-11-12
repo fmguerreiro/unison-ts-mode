@@ -45,14 +45,7 @@ fetches from any host."
 
 (defcustom unison-ts-grammar-revision "bd385224a50baa039d0390fc749be0a0a3071b75"
   "Git revision (branch, tag, or commit) for the grammar.
-If nil, uses the default branch.
-Pinned to upstream commit bd38522 (grammar 3.0.0).  Since 3.0.0,
-keywords and the `=', `:', `->' and `|' delimiters are anonymous nodes,
-so font-lock and indent rules match them as strings.  Revisions before
-28be881 lex a trailing `--' as a symbolic operator and the comment text
-as identifiers, derailing the parse for the rest of the file.
-The Emacs 29 CI jobs are the gate on any bump, and the revision is
-repeated in README.md and CLAUDE.md."
+If nil, uses the default branch."
   :type '(choice (const :tag "Default branch" nil)
                  (string :tag "Branch/tag/commit"))
   :group 'unison-ts)
@@ -87,15 +80,7 @@ this flag is checked again.")
                  (string-trim (buffer-string))))))))
 
 (defun unison-ts--install-grammar ()
-  "Fetch the pinned grammar revision and install it into tree-sitter.
-`git clone -b' resolves only branch and tag names, never a raw commit
-SHA, so this fetches the revision into a temporary directory and points
-a local branch at it before registering that branch as the source.  The
-branch exists for Emacs 29, which clones the source with `-b'; Emacs 30
-runs `git checkout' in place and would take the SHA directly.
-
-With no revision there is nothing to pin, so treesit clones the
-repository's default branch directly."
+  "Install the configured revision using a local branch for Emacs 29."
   (if (null unison-ts-grammar-revision)
       (let ((treesit-language-source-alist
              (list (list 'unison unison-ts-grammar-repository))))
