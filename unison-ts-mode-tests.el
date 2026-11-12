@@ -279,11 +279,12 @@ after it rendered as code."
     (should (= (current-indentation) 2))))
 
 (ert-deftest unison-ts-indent/if-then-else ()
-  "If-then-else should maintain proper indentation."
-  (unison-ts-mode-tests--with-buffer "foo x =\n  if x\n  then 1\n  else 2"
-    (goto-char (point-min))
-    (forward-line 2)
-    (should (= (current-indentation) 2))))
+  "Formatting aligns branch headers and corrects multiline branch bodies."
+  (unison-ts-mode-tests--with-buffer
+      "foo x =\n  if\n      x\n  then\n      1\n  else\n      2"
+    (indent-region (point-min) (point-max))
+    (should (equal (buffer-string)
+                   "foo x =\n  if\n    x\n  then\n    1\n  else\n    2"))))
 
 ;;; Identifier tests
 
@@ -716,11 +717,10 @@ these names: pure\", so this fixture must not use that form."
 ;;; Additional indentation tests - nested blocks
 
 (ert-deftest unison-ts-indent/nested-let-block ()
-  "Let block contents should be indented relative to let."
+  "Formatting a let block preserves binding and result alignment."
   (unison-ts-mode-tests--with-buffer "foo =\n  let\n    x = 1\n    x"
-    (goto-char (point-min))
-    (forward-line 2)
-    (should (= (current-indentation) 4))))
+    (indent-region (point-min) (point-max))
+    (should (equal (buffer-string) "foo =\n  let\n    x = 1\n    x"))))
 
 (ert-deftest unison-ts-indent/nested-match-case ()
   "Match arms should be indented."
@@ -750,32 +750,23 @@ these names: pure\", so this fixture must not use that form."
     (forward-line 1)
     (should (= (current-indentation) 2))))
 
-(ert-deftest unison-ts-indent/let-block-alignment ()
-  "First statement in let block sets the indentation boundary."
-  (unison-ts-mode-tests--with-buffer "foo =\n  let\n    first = 1\n    second = 2"
-    (goto-char (point-min))
-    (forward-line 2)
-    (let ((first-indent (current-indentation)))
-      (forward-line 1)
-      (should (= (current-indentation) first-indent)))))
-
 (ert-deftest unison-ts-indent/let-multiple-bindings-no-cascade ()
-  "Multiple let bindings should all align at the same column, not cascade."
-  (unison-ts-mode-tests--with-buffer "foo x =\n  let\n    a = 1\n    b = 2\n    c = 3"
-    (goto-char (point-min))
-    (forward-line 2)
-    (should (= (current-indentation) 4))
-    (forward-line 1)
-    (should (= (current-indentation) 4))
-    (forward-line 1)
-    (should (= (current-indentation) 4))))
+  "Formatting keeps all let bindings and the final expression aligned."
+  (unison-ts-mode-tests--with-buffer
+      "foo =\n  let\n    a = 1\n    b = 2\n    c = 3\n    a + b + c"
+    (indent-region (point-min) (point-max))
+    (should (equal
+             (buffer-string)
+             "foo =\n  let\n    a = 1\n    b = 2\n    c = 3\n    a + b + c"))))
 
 (ert-deftest unison-ts-indent/deeply-nested ()
-  "Deeply nested expressions should maintain proper indentation."
-  (unison-ts-mode-tests--with-buffer "foo x =\n  if x\n  then\n    let\n      y = 1\n      y\n  else 0"
-    (goto-char (point-min))
-    (forward-line 4)
-    (should (= (current-indentation) 6))))
+  "Formatting a let inside a conditional preserves both block boundaries."
+  (unison-ts-mode-tests--with-buffer
+      "foo x =\n  if x\n  then\n    let\n      y = 1\n      y\n  else 0"
+    (indent-region (point-min) (point-max))
+    (should
+     (equal (buffer-string)
+            "foo x =\n  if x\n  then\n    let\n      y = 1\n      y\n  else 0"))))
 
 (ert-deftest unison-ts-indent/where-clause ()
   "Where clause bindings should be indented."
@@ -1873,6 +1864,21 @@ the parser routes to the 'add command."
     (should (equal (cdr parsed) "foo = 1\nbar = 2"))))
 
 ;;; Grammar installation - fetch the pinned revision, verify availability
+
+(ert-deftest unison-ts-install/rejects-incompatible-installed-grammar ()
+  "An available but incompatible grammar must not enable tree-sitter."
+  (require 'unison-ts-install)
+  (require 'cl-lib)
+  (require 'warnings)
+  (let ((unison-ts-grammar-install nil))
+    (cl-letf (((symbol-function 'treesit-language-available-p)
+               (lambda (&rest _) t))
+              ((symbol-function 'treesit-query-compile)
+               (lambda (_language _query &optional eager)
+                 (when eager
+                   (signal 'treesit-query-error '("Invalid node type")))))
+              ((symbol-function 'display-warning) #'ignore))
+      (should-not (unison-ts-ensure-grammar)))))
 
 (defun unison-ts-tests--make-git-fixture ()
   "Create a throwaway git repo with two commits and return a plist.

@@ -148,13 +148,30 @@ that the install call signaled or returned non-nil."
        :error)
       nil)))
 
+(defun unison-ts--grammar-compatible-p ()
+  "Return non-nil for a compatible grammar, otherwise warn how to rebuild it."
+  (condition-case nil
+      (progn
+        (treesit-query-compile
+         'unison
+         '((if_block) (then_block) (else_block)
+           (pattern (var_or_nullary_ctor)) (term_definition "="))
+         t)
+        t)
+    (treesit-query-error
+     (display-warning
+      'unison-ts
+      (concat "The installed Unison grammar is incompatible with this mode.  "
+              "Run M-x unison-ts-install-grammar to rebuild it.  If the warning persists, "
+              "restart Emacs and check treesit-extra-load-path for an older grammar.")
+      :warning)
+     nil)))
+
 (defun unison-ts-ensure-grammar ()
-  "Ensure tree-sitter grammar for Unison is installed.
-Return t if the grammar is available, nil if it is unavailable and
-installation was declined, disabled, or failed."
+  "Return non-nil for a compatible grammar, installing one when configured."
   (cond
    ((treesit-language-available-p 'unison)
-    t)
+    (unison-ts--grammar-compatible-p))
 
    ;; Must precede the mode arms so a decline suppresses a later
    ;; auto-install too; see `unison-ts--install-declined'.
@@ -164,13 +181,15 @@ installation was declined, disabled, or failed."
    ((eq unison-ts-grammar-install 'auto)
     ;; See `unison-ts--install-failed' for why a failure latches here.
     (unless unison-ts--install-failed
-      (or (unison-ts-install-grammar)
+      (or (and (unison-ts-install-grammar)
+               (unison-ts--grammar-compatible-p))
           (progn (setq unison-ts--install-failed t) nil))))
 
    ((eq unison-ts-grammar-install 'prompt)
     ;; Only an explicit decline latches; see `unison-ts--install-declined'.
     (if (y-or-n-p "Install Unison grammar for syntax highlighting? ")
-        (unison-ts-install-grammar)
+        (and (unison-ts-install-grammar)
+             (unison-ts--grammar-compatible-p))
       (setq unison-ts--install-declined t)
       nil))
 

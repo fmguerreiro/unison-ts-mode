@@ -26,14 +26,14 @@
   "Number of spaces for each indentation step in `unison-ts-mode'.")
 
 (defun unison-ts--let-binding-anchor (_node parent bol &rest _)
-  "Anchor for let bindings.
-Uses PARENT to find the containing term_definition.
-Computes indentation from containing term_definition, or returns BOL."
+  "Anchor let bindings to the block containing PARENT's let expression."
   (let* ((exp-let (unison-ts--find-exp-let-ancestor parent))
-         (outer-term-def (when exp-let (treesit-node-parent exp-let))))
-    (if outer-term-def
+         (container (when exp-let (treesit-node-parent exp-let))))
+    (when (and container (equal (treesit-node-type container) "block_term"))
+      (setq container (treesit-node-parent container)))
+    (if container
         (save-excursion
-          (goto-char (treesit-node-start outer-term-def))
+          (goto-char (treesit-node-start container))
           (back-to-indentation)
           (point))
       bol)))
@@ -59,21 +59,6 @@ Uses PARENT to find the exp_let ancestor."
              (equal (treesit-node-type term-decl-ancestor) "term_declaration")
              (eq (treesit-node-parent term-decl-ancestor) exp-let))))))
 
-(defun unison-ts--let-binding-anchor-v2 (_node parent bol &rest _)
-  "Anchor for let bindings.
-Uses PARENT to find the containing term_definition and compute indent.
-Returns BOL if no term_definition is found."
-  (let ((exp-let (unison-ts--find-exp-let-ancestor parent)))
-    (if exp-let
-        (let ((outer-term-def (treesit-node-parent exp-let)))
-          (if outer-term-def
-              (save-excursion
-                (goto-char (treesit-node-start outer-term-def))
-                (back-to-indentation)
-                (point))
-            bol))
-      bol)))
-
 (defvar unison-ts-indent-rules
   `((unison
      ((parent-is "unison") column-0 0)
@@ -94,10 +79,15 @@ Returns BOL if no term_definition is found."
      ((node-is "then_block") parent 0)
      ((node-is "else_block") parent 0)
 
+     ((or (parent-is "if_block")
+          (parent-is "then_block")
+          (parent-is "else_block"))
+      parent-bol ,unison-ts-indent-offset)
+
      ((parent-is "exp_if") parent-bol ,unison-ts-indent-offset)
 
      (unison-ts--inside-let-binding-p
-      unison-ts--let-binding-anchor-v2 ,(* 2 unison-ts-indent-offset))
+      unison-ts--let-binding-anchor ,(* 2 unison-ts-indent-offset))
 
      ((parent-is "tuple_or_parenthesized") parent-bol ,unison-ts-indent-offset)
      ((parent-is "literal_list") parent-bol ,unison-ts-indent-offset)
